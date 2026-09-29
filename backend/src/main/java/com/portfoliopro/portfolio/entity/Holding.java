@@ -38,4 +38,8 @@ public class Holding extends BaseEntity {
 
     @Column(name = "total_invested", nullable = false, precision = 19, scale = 4)
     private BigDecimal totalInvested;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
 }

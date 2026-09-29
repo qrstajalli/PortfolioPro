@@ -2,6 +2,7 @@ package com.portfoliopro.trade.entity;
 
 import com.portfoliopro.common.BaseEntity;
 import com.portfoliopro.market.entity.Stock;
+import com.portfoliopro.portfolio.entity.Portfolio;
 import com.portfoliopro.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -12,6 +13,7 @@ import java.time.Instant;
 @Entity
 @Table(name = "orders", indexes = {
         @Index(name = "idx_order_user_id", columnList = "user_id"),
+        @Index(name = "idx_order_portfolio_id", columnList = "portfolio_id"),
         @Index(name = "idx_order_number", columnList = "order_number")
 })
 @Getter
@@ -31,6 +33,10 @@ public class Order extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "portfolio_id")
+    private Portfolio portfolio;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "stock_id", nullable = false)
