@@ -14,6 +14,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import com.portfoliopro.auth.dto.ForgotPasswordRequest;
+import com.portfoliopro.auth.dto.ResetPasswordRequest;
+
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
@@ -32,6 +35,27 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(ApiResponse.ok("Login successful", response));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.ok(ApiResponse.ok("If an account with that email exists, password reset instructions have been sent.", null));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.ok("Password has been successfully reset. You may now log in with your new password.", null));
+    }
+
+    @GetMapping("/dev/reset-token")
+    public ResponseEntity<ApiResponse<String>> getDevResetToken(@RequestParam String email) {
+        String token = authService.getDevResetToken(email);
+        if (token == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(ApiResponse.ok("Dev token retrieved", token));
     }
 
     @GetMapping("/me")

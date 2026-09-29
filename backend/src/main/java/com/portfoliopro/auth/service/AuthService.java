@@ -24,6 +24,20 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
+import com.portfoliopro.auth.dto.ForgotPasswordRequest;
+import com.portfoliopro.auth.dto.ResetPasswordRequest;
+import com.portfoliopro.auth.entity.PasswordResetToken;
+import com.portfoliopro.auth.repository.PasswordResetTokenRepository;
+import com.portfoliopro.email.service.EmailService;
+import com.portfoliopro.exception.BadRequestException;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.UUID;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -35,6 +49,8 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final AppProperties appProperties;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailService emailService;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -131,5 +147,74 @@ public class AuthService {
                 .enabled(user.getEnabled())
                 .createdAt(user.getCreatedAt())
                 .build();
+    }
+
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest request) {
+        String normalizedEmail = request.getEmail().trim().toLowerCase();
+        Optional<User> userOpt = userRepository.findByEmail(normalizedEmail);
+        if (userOpt.isEmpty()) {
+            log.info("Password reset requested for non-existent email [REDACTED]");
+            return;
+        }
+
+        User user = userOpt.get();
+        // Invalidate any existing unused reset tokens for this user
+        passwordResetTokenRepository.invalidateActiveTokensForUser(user);
+
+        // Generate cryptographically secure random token (64 hex characters)
+        String rawToken = UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
+        String tokenHash = hashToken(rawToken);
+
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .tokenHash(tokenHash)
+                .user(user)
+                .expiryDate(LocalDateTime.now().plusMinutes(15))
+                .used(false)
+                .build();
+
+        passwordResetTokenRepository.save(resetToken);
+        emailService.sendPasswordResetEmail(user.getEmail(), rawToken);
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        String rawToken = request.getToken().trim();
+        String tokenHash = hashToken(rawToken);
+
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByTokenHashAndUsedFalse(tokenHash)
+                .orElseThrow(() -> new BadRequestException("Invalid or expired password reset token"));
+
+        if (resetToken.isExpired()) {
+            resetToken.setUsed(true);
+            passwordResetTokenRepository.save(resetToken);
+            throw new BadRequestException("Password reset token has expired. Please request a new one.");
+        }
+
+        User user = resetToken.getUser();
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        resetToken.setUsed(true);
+        passwordResetTokenRepository.save(resetToken);
+        log.info("Password successfully reset for user id={}", user.getId());
+    }
+
+    public String getDevResetToken(String email) {
+        return emailService.getLatestDevResetToken(email);
+    }
+
+    private String hashToken(String rawToken) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(rawToken.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
     }
 }

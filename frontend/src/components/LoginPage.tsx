@@ -186,7 +186,7 @@ export const LoginPage: React.FC = () => {
           )}
         </div>
 
-        {/* Remember me & Security info */}
+        {/* Remember me & Forgot Password */}
         <div className="flex items-center justify-between text-xs">
           <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-300 text-[11px] font-mono">
             <input
@@ -197,7 +197,12 @@ export const LoginPage: React.FC = () => {
             />
             <span>Remember session</span>
           </label>
-          <span className="text-[10px] font-mono text-slate-500">JWT Stateless</span>
+          <Link
+            to="/forgot-password"
+            className="text-[11px] font-mono text-blue-600 dark:text-blue-400 hover:underline transition-colors"
+          >
+            Forgot password?
+          </Link>
         </div>
 
         {/* Submit Button */}

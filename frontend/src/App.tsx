@@ -6,6 +6,8 @@ import Navbar from './components/Navbar'
 import BrandLogo from './components/BrandLogo'
 import LoginPage from './components/LoginPage'
 import RegisterPage from './components/RegisterPage'
+import ForgotPasswordPage from './components/ForgotPasswordPage'
+import ResetPasswordPage from './components/ResetPasswordPage'
 import Dashboard from './components/Dashboard'
 import LandingView from './components/LandingView'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -74,6 +76,22 @@ export const AppContent: React.FC = () => {
             element={
               <PublicOnlyRoute>
                 <RegisterPage />
+              </PublicOnlyRoute>
+            }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              <PublicOnlyRoute>
+                <ForgotPasswordPage />
+              </PublicOnlyRoute>
+            }
+          />
+          <Route
+            path="/reset-password"
+            element={
+              <PublicOnlyRoute>
+                <ResetPasswordPage />
               </PublicOnlyRoute>
             }
           />

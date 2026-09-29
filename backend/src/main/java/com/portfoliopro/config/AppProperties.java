@@ -17,6 +17,8 @@ public class AppProperties {
     private Portfolio portfolio = new Portfolio();
     private Cors cors = new Cors();
     private Jwt jwt = new Jwt();
+    private Auth auth = new Auth();
+    private Mail mail = new Mail();
 
     @Getter
     @Setter
@@ -36,5 +38,18 @@ public class AppProperties {
         private String secret = "4a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";
         private long expirationMs = 86400000L;
         private String issuer = "portfoliopro";
+    }
+
+    @Getter
+    @Setter
+    public static class Auth {
+        private boolean devMode = true;
+    }
+
+    @Getter
+    @Setter
+    public static class Mail {
+        private String from = "noreply@portfoliopro.com";
+        private String frontendUrl = "http://localhost:5173";
     }
 }

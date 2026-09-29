@@ -28,6 +28,19 @@ export const authService = {
     return response.data.data
   },
 
+  async forgotPassword(email: string): Promise<string> {
+    const response = await api.post<ApiResponse<void>>('/auth/forgot-password', { email })
+    return response.data.message || 'If an account with that email exists, password reset instructions have been sent.'
+  },
+
+  async resetPassword(token: string, newPassword: string): Promise<string> {
+    const response = await api.post<ApiResponse<void>>('/auth/reset-password', {
+      token,
+      newPassword,
+    })
+    return response.data.message || 'Password has been successfully reset.'
+  },
+
   saveAuth(authResponse: AuthResponse): void {
     localStorage.setItem('portfoliopro_token', authResponse.token)
     localStorage.setItem('portfoliopro_user', JSON.stringify(authResponse.user))
