@@ -71,10 +71,21 @@ cd PortfolioPro
 
 ---
 
-### Step 2: Run the Backend
+### Step 2: Configure Environment & Run Backend
 
-You can run the backend with zero external database setup using the built-in **H2 in-memory profile**:
+1. Copy `.env.example` to `.env` in the root folder:
+```bash
+cp .env.example .env
+```
+2. Configure your MySQL credentials in `.env` (or via environment variables):
+```properties
+SPRING_PROFILES_ACTIVE=default
+DB_URL=jdbc:mysql://localhost:3306/portfoliopro?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+DB_USERNAME=root
+DB_PASSWORD=your_password
+```
 
+3. Build and start the backend:
 ```bash
 cd backend
 
@@ -82,21 +93,17 @@ cd backend
 .\mvnw.cmd clean compile       # Windows
 # or: ./mvnw clean compile    # Linux / macOS
 
-# Run Spring Boot (Default profile: local-h2)
+# Run Spring Boot with persistent MySQL
 .\mvnw.cmd spring-boot:run     # Windows
 # or: ./mvnw spring-boot:run   # Linux / macOS
 ```
 
 The backend server starts on **`http://localhost:8080`**.
 
-> **Optional: Using MySQL with Docker Compose**
+> **Testing / Ephemeral In-Memory Mode:**
+> To run the backend with zero external database dependencies using ephemeral in-memory H2:
 > ```bash
-> # In the root directory:
-> docker compose up -d
-> 
-> # Run backend against MySQL:
-> cd backend
-> .\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=default
+> .\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=local-h2
 > ```
 
 ---

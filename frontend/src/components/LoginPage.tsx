@@ -6,7 +6,6 @@ import {
   Lock,
   AlertCircle,
   Loader2,
-  Sparkles,
   ArrowRight,
   Eye,
   EyeOff
@@ -89,13 +88,6 @@ export const LoginPage: React.FC = () => {
     }
   }
 
-  const fillDemoAccount = () => {
-    setEmail('trader@portfoliopro.com')
-    setPassword('Trader@123')
-    setTouched({ email: true, password: true })
-    setError(null)
-  }
-
   return (
     <div className="max-w-md w-full mx-auto my-4 p-6 sm:p-7 rounded-lg border border-slate-200 dark:border-[#1c2638] bg-white dark:bg-[#0c1220] shadow-xl dark:shadow-2xl space-y-5 animate-fade-in text-slate-900 dark:text-slate-100">
       {/* Header */}
@@ -134,7 +126,7 @@ export const LoginPage: React.FC = () => {
                 if (error) setError(null)
               }}
               onBlur={() => handleBlur('email')}
-              placeholder="trader@portfoliopro.com"
+              placeholder="you@example.com"
               className={`w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-[#070b13] border rounded text-xs font-mono text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none transition-colors ${
                 touched.email && emailError
                   ? 'border-rose-500/70 focus:border-rose-500'
@@ -228,8 +220,8 @@ export const LoginPage: React.FC = () => {
         </button>
       </form>
 
-      {/* Switch to Register & Quick Fill */}
-      <div className="pt-3.5 border-t border-slate-200 dark:border-[#182235] space-y-2.5">
+      {/* Switch to Register */}
+      <div className="pt-3.5 border-t border-slate-200 dark:border-[#182235]">
         <div className="text-center text-xs text-slate-600 dark:text-slate-400">
           Need an account?{' '}
           <Link
@@ -239,15 +231,6 @@ export const LoginPage: React.FC = () => {
             Open paper trading account
           </Link>
         </div>
-
-        <button
-          type="button"
-          onClick={fillDemoAccount}
-          className="w-full py-1.5 px-3 bg-slate-50 hover:bg-slate-100 dark:bg-[#080d18] dark:hover:bg-[#101726] border border-slate-200 hover:border-slate-300 dark:border-[#1b2537] dark:hover:border-slate-700 rounded text-[11px] font-mono text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-        >
-          <Sparkles className="h-3 w-3 text-amber-500" />
-          <span>Fill demo credentials (trader@portfoliopro.com)</span>
-        </button>
       </div>
     </div>
   )

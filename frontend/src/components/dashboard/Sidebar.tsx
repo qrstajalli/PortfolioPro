@@ -152,7 +152,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {user?.name || 'Trader'}
                 </div>
                 <div className="text-[10px] text-slate-500 truncate max-w-[100px]">
-                  {user?.email || 'trader@portfoliopro.com'}
+                  {user?.email || 'Active Session'}
                 </div>
               </div>
             )}
