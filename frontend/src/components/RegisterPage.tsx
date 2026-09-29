@@ -10,7 +10,8 @@ import {
   Shield,
   ArrowRight,
   Eye,
-  EyeOff
+  EyeOff,
+  Wallet as WalletIcon
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { AxiosError } from 'axios'
@@ -26,6 +27,17 @@ export const RegisterPage: React.FC = () => {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [agreeTerms, setAgreeTerms] = useState(true)
+
+  // Starting Virtual Capital selection
+  const CAPITAL_PRESETS = [
+    { label: '₹50K', value: 50000, desc: '₹50,000' },
+    { label: '₹2L', value: 200000, desc: '₹2,00,000' },
+    { label: '₹5L', value: 500000, desc: '₹5,00,000' },
+    { label: '₹10L', value: 1000000, desc: '₹10,00,000' },
+  ]
+  const [selectedCapital, setSelectedCapital] = useState<number>(500000)
+  const [customCapital, setCustomCapital] = useState<string>('')
+  const [isCustomCapital, setIsCustomCapital] = useState<boolean>(false)
 
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -114,7 +126,8 @@ export const RegisterPage: React.FC = () => {
 
     setLoading(true)
     try {
-      await register(name.trim(), email.trim(), password)
+      const chosenCapital = isCustomCapital ? Number(customCapital) || 500000 : selectedCapital
+      await register(name.trim(), email.trim(), password, chosenCapital)
       // On successful registration, redirect straight to dashboard!
       navigate('/dashboard', { replace: true })
     } catch (err: unknown) {
@@ -330,6 +343,73 @@ export const RegisterPage: React.FC = () => {
               <span>✕</span> {confirmPasswordError}
             </p>
           )}
+        </div>
+
+        {/* Virtual Starting Capital Selector */}
+        <div className="pt-2 border-t border-slate-200/60 dark:border-[#1c2638] space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-mono text-slate-700 dark:text-slate-300 flex items-center gap-1.5 font-semibold">
+              <WalletIcon className="h-3.5 w-3.5 text-blue-500" />
+              <span>Virtual Starting Capital</span>
+            </label>
+            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+              Paper money only
+            </span>
+          </div>
+
+          <div className="grid grid-cols-4 gap-1.5">
+            {CAPITAL_PRESETS.map((p) => {
+              const isSelected = !isCustomCapital && selectedCapital === p.value
+              return (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCapital(p.value)
+                    setIsCustomCapital(false)
+                    setCustomCapital('')
+                  }}
+                  className={`py-1.5 px-1 rounded text-center text-xs font-mono font-bold transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-slate-100 dark:bg-[#0e1628] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#1e2a3f] hover:border-slate-400'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="relative">
+            <span className="absolute left-3 top-2 text-slate-400 font-bold text-xs">
+              ₹
+            </span>
+            <input
+              type="text"
+              value={customCapital}
+              onChange={(e) => {
+                const clean = e.target.value.replace(/[^0-9]/g, '')
+                setCustomCapital(clean)
+                setIsCustomCapital(true)
+              }}
+              placeholder="Or enter custom capital (e.g. 350000)"
+              className={`w-full pl-7 pr-3 py-1.5 bg-slate-50 dark:bg-[#070b13] border rounded text-xs font-mono text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none transition-colors ${
+                isCustomCapital && customCapital
+                  ? 'border-blue-500 focus:border-blue-500'
+                  : 'border-slate-300 dark:border-[#1e2a3f] focus:border-blue-500'
+              }`}
+            />
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400 px-0.5">
+            <span>Starting Balance:</span>
+            <span className="font-bold text-blue-600 dark:text-blue-400">
+              ₹{(isCustomCapital ? Number(customCapital) || 0 : selectedCapital).toLocaleString('en-IN', {
+                minimumFractionDigits: 2,
+              })}
+            </span>
+          </div>
         </div>
 
         {/* Terms checkbox */}

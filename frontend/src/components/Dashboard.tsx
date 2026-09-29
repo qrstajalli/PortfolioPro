@@ -13,6 +13,7 @@ import PortfolioHoldingsView from './dashboard/PortfolioHoldingsView'
 import OrdersView from './dashboard/OrdersView'
 import AnalysisView from './dashboard/AnalysisView'
 import MarketsModule from './markets/MarketsModule'
+import PortfolioSetupModal from './dashboard/PortfolioSetupModal'
 
 export const Dashboard: React.FC = () => {
   const { wallet } = useAuth()
@@ -20,6 +21,14 @@ export const Dashboard: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [stocks, setStocks] = useState<StockQuote[]>([])
   const [selectedStock, setSelectedStock] = useState<StockQuote | null>(null)
+  const [isSetupModalOpen, setIsSetupModalOpen] = useState(false)
+
+  // Auto-prompt initial onboarding if wallet is unconfigured and has 0 balance
+  useEffect(() => {
+    if (wallet && wallet.isConfigured === false && Number(wallet.balance) === 0) {
+      setIsSetupModalOpen(true)
+    }
+  }, [wallet])
 
   // Fetch stocks from backend market API
   useEffect(() => {
@@ -57,6 +66,7 @@ export const Dashboard: React.FC = () => {
               setActiveTab('watchlist')
             }
           }}
+          onOpenSetupCapital={() => setIsSetupModalOpen(true)}
         />
 
         {/* Workstation Content Area */}
@@ -71,6 +81,7 @@ export const Dashboard: React.FC = () => {
                 holdingsValue={24325.0}
                 todayChangeAmount={1475.0}
                 todayChangePercent={1.21}
+                onOpenSetupCapital={() => setIsSetupModalOpen(true)}
               />
 
               {/* Grid: Performance Chart (8 cols) + Market Overview (4 cols) */}
@@ -128,6 +139,7 @@ export const Dashboard: React.FC = () => {
                 holdingsValue={24325.0}
                 todayChangeAmount={1475.0}
                 todayChangePercent={1.21}
+                onOpenSetupCapital={() => setIsSetupModalOpen(true)}
               />
               <PortfolioHoldingsView />
             </div>
@@ -149,6 +161,13 @@ export const Dashboard: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* Portfolio Setup & Capital Adjustment Modal */}
+      <PortfolioSetupModal
+        isOpen={isSetupModalOpen}
+        onClose={() => setIsSetupModalOpen(false)}
+        isInitialOnboarding={wallet?.isConfigured === false && Number(wallet?.balance) === 0}
+      />
     </div>
   )
 }

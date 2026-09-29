@@ -22,6 +22,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -54,19 +56,27 @@ public class AuthService {
         User savedUser = userRepository.save(user);
         log.info("Registered new user id={} email={}", savedUser.getId(), savedUser.getEmail());
 
-        // Automatically allocate virtual wallet with default initial cash balance (₹1,00,000)
+        BigDecimal startingCapital = request.getInitialCapital() != null && request.getInitialCapital().compareTo(BigDecimal.ZERO) > 0
+                ? request.getInitialCapital()
+                : BigDecimal.ZERO;
+        boolean isConfigured = request.getInitialCapital() != null && request.getInitialCapital().compareTo(BigDecimal.ZERO) > 0;
+
+        // Allocate virtual wallet with user-chosen starting capital
         Wallet wallet = Wallet.builder()
                 .user(savedUser)
-                .balance(appProperties.getPortfolio().getInitialCashBalance())
+                .balance(startingCapital)
+                .initialBalance(startingCapital)
+                .isConfigured(isConfigured)
                 .currency(appProperties.getPortfolio().getDefaultCurrency())
                 .build();
         walletRepository.save(wallet);
         log.info("Created virtual wallet for user id={} with initial balance={}", savedUser.getId(), wallet.getBalance());
 
-        // Initialize Phase 1 portfolio representation
+        // Initialize portfolio representation with configured capital
         Portfolio portfolio = Portfolio.builder()
                 .user(savedUser)
-                .cashBalance(appProperties.getPortfolio().getInitialCashBalance())
+                .cashBalance(startingCapital)
+                .initialCapital(startingCapital)
                 .currency(appProperties.getPortfolio().getDefaultCurrency())
                 .build();
         portfolioRepository.save(portfolio);

@@ -10,7 +10,8 @@ interface AuthContextType {
   isAuthenticated: boolean
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (name: string, email: string, password: string) => Promise<void>
+  register: (name: string, email: string, password: string, initialCapital?: number) => Promise<void>
+  setupCapital: (initialCapital: number) => Promise<void>
   logout: () => void
   refreshWallet: () => Promise<void>
 }
@@ -74,12 +75,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await fetchWallet()
   }
 
-  const register = async (name: string, email: string, password: string) => {
-    const authData = await authService.register(name, email, password)
+  const register = async (name: string, email: string, password: string, initialCapital?: number) => {
+    const authData = await authService.register(name, email, password, initialCapital)
     authService.saveAuth(authData)
     setUser(authData.user)
     setToken(authData.token)
     await fetchWallet()
+  }
+
+  const setupCapital = async (initialCapital: number) => {
+    const updatedWallet = await walletService.setupCapital(initialCapital)
+    setWallet(updatedWallet)
   }
 
   const refreshWallet = async () => {
@@ -96,6 +102,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         register,
+        setupCapital,
         logout,
         refreshWallet,
       }}

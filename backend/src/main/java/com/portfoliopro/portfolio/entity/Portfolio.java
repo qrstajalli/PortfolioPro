@@ -29,6 +29,9 @@ public class Portfolio extends BaseEntity {
     @Column(name = "cash_balance", nullable = false, precision = 19, scale = 4)
     private BigDecimal cashBalance;
 
+    @Column(name = "initial_capital", precision = 19, scale = 4)
+    private BigDecimal initialCapital;
+
     @Column(name = "currency", nullable = false, length = 10)
     @Builder.Default
     private String currency = "INR";

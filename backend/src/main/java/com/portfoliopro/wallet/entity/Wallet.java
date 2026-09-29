@@ -29,6 +29,13 @@ public class Wallet extends BaseEntity {
     @Column(name = "balance", nullable = false, precision = 19, scale = 4)
     private BigDecimal balance;
 
+    @Column(name = "initial_balance", precision = 19, scale = 4)
+    private BigDecimal initialBalance;
+
+    @Column(name = "is_configured")
+    @Builder.Default
+    private Boolean isConfigured = false;
+
     @Column(name = "currency", nullable = false, length = 10)
     @Builder.Default
     private String currency = "INR";

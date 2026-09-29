@@ -46,17 +46,18 @@ public class Phase2AuthAndWalletIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should successfully register, create ₹1,00,000 wallet, login, and access protected endpoints")
+    @DisplayName("Should successfully register with configurable virtual capital, login, and access protected endpoints")
     void testFullAuthAndWalletLifecycle() throws Exception {
         String regPayload = """
                 {
                     "name": "Sarah Connor",
                     "email": "sarah.connor@test.com",
-                    "password": "Password123!"
+                    "password": "Password123!",
+                    "initialCapital": 250000.00
                 }
                 """;
 
-        // 1. Register new user
+        // 1. Register new user with user-chosen starting capital
         MvcResult regResult = mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(regPayload))
@@ -73,10 +74,10 @@ public class Phase2AuthAndWalletIntegrationTest {
         Number userIdNum = JsonPath.read(responseString, "$.data.user.id");
         Long userId = userIdNum.longValue();
 
-        // 2. Verify automatic wallet creation with ₹1,00,000.00
+        // 2. Verify automatic wallet creation with user's configured capital
         Optional<Wallet> walletOpt = walletRepository.findByUserId(userId);
         assertThat(walletOpt).isPresent();
-        assertThat(walletOpt.get().getBalance()).isEqualByComparingTo(new BigDecimal("100000.0000"));
+        assertThat(walletOpt.get().getBalance()).isEqualByComparingTo(new BigDecimal("250000.00"));
         assertThat(walletOpt.get().getCurrency()).isEqualTo("INR");
 
         // 3. Login with credentials
@@ -111,9 +112,24 @@ public class Phase2AuthAndWalletIntegrationTest {
                         .header("Authorization", "Bearer " + loginToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.balance").value(100000.0000))
+                .andExpect(jsonPath("$.data.balance").value(250000.00))
                 .andExpect(jsonPath("$.data.currency").value("INR"))
                 .andExpect(jsonPath("$.data.userId").value(userId));
+
+        // 6. Test updating/configuring capital via /api/v1/wallet/setup
+        String setupPayload = """
+                {
+                    "initialCapital": 500000.00
+                }
+                """;
+        mockMvc.perform(post("/api/v1/wallet/setup")
+                        .header("Authorization", "Bearer " + loginToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(setupPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.balance").value(500000.00))
+                .andExpect(jsonPath("$.data.initialBalance").value(500000.00));
     }
 
     @Test

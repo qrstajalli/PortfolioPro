@@ -13,6 +13,7 @@ interface PortfolioMetricsProps {
   holdingsValue?: number
   todayChangeAmount?: number
   todayChangePercent?: number
+  onOpenSetupCapital?: () => void
 }
 
 export const PortfolioMetrics: React.FC<PortfolioMetricsProps> = ({
@@ -21,6 +22,7 @@ export const PortfolioMetrics: React.FC<PortfolioMetricsProps> = ({
   holdingsValue = 24325.0,
   todayChangeAmount = 1475.0,
   todayChangePercent = 1.21,
+  onOpenSetupCapital,
 }) => {
   const cashBalance = wallet ? Number(wallet.balance) : 0.0
   const totalNetWorth = cashBalance + holdingsValue
@@ -71,17 +73,22 @@ export const PortfolioMetrics: React.FC<PortfolioMetricsProps> = ({
           <span className="uppercase tracking-wider flex items-center gap-1.5">
             <WalletIcon className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> Available Cash
           </span>
-          <span className="text-[10px] px-1 py-0.2 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20 font-mono font-semibold">
-            FREE MARGIN
-          </span>
+          {onOpenSetupCapital && (
+            <button
+              onClick={onOpenSetupCapital}
+              className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:hover:bg-blue-500/20 dark:border-blue-500/20 font-mono font-medium transition-colors cursor-pointer"
+            >
+              Adjust Capital
+            </button>
+          )}
         </div>
         <div className="mt-2">
           <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 tabular-nums tracking-tight">
             {formatINR(cashBalance)}
           </div>
           <div className="mt-1 flex items-center justify-between text-[11px] font-mono text-slate-400 dark:text-slate-500">
-            <span>Currency: {wallet?.currency || 'INR'}</span>
-            <span>Version: v{wallet?.version ?? 0}</span>
+            <span>Starting: {formatINR(wallet?.initialBalance ?? cashBalance)}</span>
+            <span>{wallet?.currency || 'INR'}</span>
           </div>
         </div>
       </div>

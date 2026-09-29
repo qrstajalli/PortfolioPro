@@ -11,6 +11,8 @@ export interface Wallet {
   id: number
   userId: number
   balance: number
+  initialBalance?: number
+  isConfigured?: boolean
   currency: string
   version: number
   createdAt: string

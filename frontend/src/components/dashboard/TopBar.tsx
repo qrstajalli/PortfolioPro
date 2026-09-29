@@ -18,9 +18,10 @@ import type { StockQuote } from '../../types/auth'
 interface TopBarProps {
   stocks: StockQuote[]
   onSelectStock?: (stock: StockQuote) => void
+  onOpenSetupCapital?: () => void
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ stocks, onSelectStock }) => {
+export const TopBar: React.FC<TopBarProps> = ({ stocks, onSelectStock, onOpenSetupCapital }) => {
   const { user, wallet, refreshWallet, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [searchQuery, setSearchQuery] = useState('')
@@ -250,6 +251,19 @@ export const TopBar: React.FC<TopBarProps> = ({ stocks, onSelectStock }) => {
                 <span>Markets Terminal</span>
                 <ExternalLink className="h-3 w-3 text-slate-400" />
               </Link>
+
+              {onOpenSetupCapital && (
+                <button
+                  onClick={() => {
+                    setUserDropdownOpen(false)
+                    onOpenSetupCapital()
+                  }}
+                  className="w-full px-3 py-1.5 flex items-center justify-between text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors cursor-pointer text-left"
+                >
+                  <span>Configure Virtual Capital</span>
+                  <WalletIcon className="h-3 w-3" />
+                </button>
+              )}
 
               <button
                 onClick={() => {

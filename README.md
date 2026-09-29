@@ -8,13 +8,13 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-v4-06B6D4?style=flat&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**PortfolioPro** is a modern, high-precision simulated stock trading and portfolio management workstation. Designed for retail investors and traders, it provides risk-free simulated equity trading with **₹1,00,000.00** starting virtual capital, live market analytics, institutional-grade dark mode, and an extensible architecture designed for real-time market data providers (such as Upstox).
+**PortfolioPro** is a modern, high-precision simulated stock trading and portfolio management workstation. Designed for retail investors and traders, it provides risk-free simulated equity trading with customizable virtual starting capital configured directly by the user, live market analytics, institutional-grade dark mode, and an extensible architecture designed for real-time market data providers (such as Upstox).
 
 ---
 
 ## 🌟 Key Features
 
-- **💼 Virtual Capital Allocation:** Every registered user receives a default virtual wallet credited with **₹1,00,000.00 INR**.
+- **💼 Configurable Virtual Capital:** Users choose and configure their own virtual paper-trading starting capital during registration or onboarding to match their individual trading strategy.
 - **📊 Real-Time Market Feed Architecture:** Decoupled `MarketDataProvider` abstraction interface supporting mock feeds, with pluggable support for Indian broker APIs (Upstox / NSE / BSE).
 - **📈 Interactive Technical Charts:** Candlestick and area chart visualizations across multiple timeframes (`1D`, `1W`, `1M`, `3M`, `1Y`, `ALL`) with intraday volume tracking.
 - **🔢 High-Precision Monetary Math:** All order totals, cash balances, and Weighted Average Price (WAP) calculations utilize Java `BigDecimal` with `RoundingMode.HALF_UP` to prevent floating-point rounding errors.
@@ -127,7 +127,7 @@ All REST endpoints are prefixed with `/api/v1`.
 
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/auth/register` | Public | Register new user + auto-allocate ₹1,00,000 wallet |
+| `POST` | `/api/v1/auth/register` | Public | Register new user with optional custom virtual capital |
 | `POST` | `/api/v1/auth/login` | Public | Authenticate user and receive JWT Bearer token |
 
 #### Register Request Body:
@@ -135,7 +135,8 @@ All REST endpoints are prefixed with `/api/v1`.
 {
   "name": "Jane Trader",
   "email": "jane@example.com",
-  "password": "SecurePassword123!"
+  "password": "SecurePassword123!",
+  "initialCapital": 250000.00
 }
 ```
 
@@ -162,7 +163,9 @@ All REST endpoints are prefixed with `/api/v1`.
 
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/wallet` | Bearer Token | Fetch current user's virtual buying power |
+| `GET` | `/api/v1/wallet` | Bearer Token | Fetch current user's virtual buying power and configuration |
+| `POST` | `/api/v1/wallet/setup` | Bearer Token | Set up or reset user's virtual starting capital |
+| `PUT` | `/api/v1/wallet/capital` | Bearer Token | Update or adjust user's virtual starting capital |
 
 ### 3. Market Quotes (`/api/v1/market`)
 
@@ -236,7 +239,6 @@ public interface MarketDataProvider {
 | `PORT` | `8080` | Backend server port |
 | `JWT_SECRET` | *32-byte default key* | HMAC256 signature secret for JWT |
 | `JWT_EXPIRATION_MS` | `86400000` (24h) | JWT validity window |
-| `INITIAL_CASH_BALANCE` | `100000.0000` | Starting virtual allocation |
 | `DEFAULT_CURRENCY` | `INR` | Default currency code |
 
 ---

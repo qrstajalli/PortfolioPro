@@ -2,12 +2,16 @@ import api from './api'
 import type { ApiResponse, AuthResponse, User } from '../types/auth'
 
 export const authService = {
-  async register(name: string, email: string, password: string): Promise<AuthResponse> {
-    const response = await api.post<ApiResponse<AuthResponse>>('/auth/register', {
+  async register(name: string, email: string, password: string, initialCapital?: number): Promise<AuthResponse> {
+    const payload: { name: string; email: string; password: string; initialCapital?: number } = {
       name,
       email,
       password,
-    })
+    }
+    if (initialCapital !== undefined && initialCapital > 0) {
+      payload.initialCapital = initialCapital
+    }
+    const response = await api.post<ApiResponse<AuthResponse>>('/auth/register', payload)
     return response.data.data
   },
 

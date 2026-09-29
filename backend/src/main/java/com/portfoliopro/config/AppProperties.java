@@ -21,7 +21,6 @@ public class AppProperties {
     @Getter
     @Setter
     public static class Portfolio {
-        private BigDecimal initialCashBalance = new BigDecimal("100000.0000");
         private String defaultCurrency = "INR";
     }
 

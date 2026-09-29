@@ -34,7 +34,6 @@ server:
 # PortfolioPro Custom Business Configuration
 app:
   portfolio:
-    initial-cash-balance: ${INITIAL_CASH_BALANCE:100000.0000}
     default-currency: ${DEFAULT_CURRENCY:INR}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}

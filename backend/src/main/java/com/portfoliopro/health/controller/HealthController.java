@@ -28,7 +28,6 @@ public class HealthController {
                 "app", "PortfolioPro Backend",
                 "phase", "Phase 1: Project Scaffolding & Core Architecture",
                 "profiles", Arrays.asList(environment.getActiveProfiles()),
-                "initialCashBalance", appProperties.getPortfolio().getInitialCashBalance(),
                 "currency", appProperties.getPortfolio().getDefaultCurrency(),
                 "timestamp", Instant.now().toString()
         );
