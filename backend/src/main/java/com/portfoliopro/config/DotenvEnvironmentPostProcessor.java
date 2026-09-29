@@ -53,7 +53,7 @@ public class DotenvEnvironmentPostProcessor implements EnvironmentPostProcessor,
         }
 
         if (!props.isEmpty()) {
-            environment.getPropertySources().addLast(new MapPropertySource(PROPERTY_SOURCE_NAME, props));
+            environment.getPropertySources().addFirst(new MapPropertySource(PROPERTY_SOURCE_NAME, props));
             System.out.println("Loaded " + props.size() + " environment variables from " + envFile.getAbsolutePath());
         }
     }
@@ -72,6 +72,6 @@ public class DotenvEnvironmentPostProcessor implements EnvironmentPostProcessor,
 
     @Override
     public int getOrder() {
-        return Ordered.LOWEST_PRECEDENCE;
+        return Ordered.HIGHEST_PRECEDENCE;
     }
 }
