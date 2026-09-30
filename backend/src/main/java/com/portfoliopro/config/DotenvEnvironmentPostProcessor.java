@@ -45,7 +45,9 @@ public class DotenvEnvironmentPostProcessor implements EnvironmentPostProcessor,
                         (value.startsWith("'") && value.endsWith("'"))) {
                         value = value.substring(1, value.length() - 1);
                     }
-                    props.put(key, value);
+                    if (!value.isEmpty()) {
+                        props.put(key, value);
+                    }
                 }
             }
         } catch (IOException e) {

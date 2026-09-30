@@ -145,8 +145,103 @@ public class AuthService {
                 .email(user.getEmail())
                 .role(user.getRole().name())
                 .enabled(user.getEnabled())
+                .authProvider(user.getAuthProvider())
+                .imageUrl(user.getImageUrl())
                 .createdAt(user.getCreatedAt())
                 .build();
+    }
+
+    @Transactional
+    public User processGoogleOAuthUser(String googleSub, String email, String name, String picture) {
+        if (googleSub == null || googleSub.isBlank()) {
+            throw new BadRequestException("Google subject identifier (sub) is missing");
+        }
+
+        String normalizedEmail = email != null ? email.trim().toLowerCase() : null;
+
+        // 1. Try finding by stable Google Sub identifier
+        Optional<User> userBySub = userRepository.findByGoogleSub(googleSub);
+        if (userBySub.isPresent()) {
+            User existingUser = userBySub.get();
+            boolean updated = false;
+            if (name != null && !name.isBlank() && !name.equals(existingUser.getName())) {
+                existingUser.setName(name);
+                updated = true;
+            }
+            if (picture != null && !picture.isBlank() && !picture.equals(existingUser.getImageUrl())) {
+                existingUser.setImageUrl(picture);
+                updated = true;
+            }
+            if (updated) {
+                existingUser = userRepository.save(existingUser);
+            }
+            log.info("Google OAuth login for existing user id={} googleSub={}", existingUser.getId(), googleSub);
+            return existingUser;
+        }
+
+        // 2. Not found by googleSub: check if an existing account has this email
+        if (normalizedEmail != null) {
+            Optional<User> userByEmail = userRepository.findByEmail(normalizedEmail);
+            if (userByEmail.isPresent()) {
+                User existingUser = userByEmail.get();
+                if (existingUser.getGoogleSub() != null && !existingUser.getGoogleSub().equals(googleSub)) {
+                    log.warn("Account conflict: email {} already linked to googleSub={}", normalizedEmail, existingUser.getGoogleSub());
+                    throw new DuplicateEmailException("This email is already associated with another Google account.");
+                }
+
+                existingUser.setGoogleSub(googleSub);
+                if (existingUser.getAuthProvider() == null || "LOCAL".equalsIgnoreCase(existingUser.getAuthProvider())) {
+                    existingUser.setAuthProvider("GOOGLE_AND_LOCAL");
+                }
+                if (picture != null && !picture.isBlank() && existingUser.getImageUrl() == null) {
+                    existingUser.setImageUrl(picture);
+                }
+                User savedUser = userRepository.save(existingUser);
+                log.info("Safely linked Google OAuth identity (sub={}) to existing user id={} email={}",
+                        googleSub, savedUser.getId(), normalizedEmail);
+                return savedUser;
+            }
+        }
+
+        // 3. Brand new user via Google OAuth
+        String effectiveName = (name != null && !name.isBlank()) ? name.trim() : (normalizedEmail != null ? normalizedEmail.split("@")[0] : "Google User");
+        String effectiveUsername = normalizedEmail != null ? normalizedEmail : "google_" + googleSub;
+
+        User newUser = User.builder()
+                .name(effectiveName)
+                .email(normalizedEmail)
+                .username(effectiveUsername)
+                .googleSub(googleSub)
+                .authProvider("GOOGLE")
+                .imageUrl(picture)
+                .passwordHash(passwordEncoder.encode(UUID.randomUUID().toString()))
+                .role(Role.ROLE_USER)
+                .enabled(true)
+                .build();
+
+        User savedUser = userRepository.save(newUser);
+        log.info("Registered new user via Google OAuth id={} email={} googleSub={}", savedUser.getId(), normalizedEmail, googleSub);
+
+        // Allocate virtual wallet (INR 0 unconfigured initial balance)
+        Wallet wallet = Wallet.builder()
+                .user(savedUser)
+                .balance(BigDecimal.ZERO)
+                .initialBalance(BigDecimal.ZERO)
+                .isConfigured(false)
+                .currency(appProperties.getPortfolio().getDefaultCurrency())
+                .build();
+        walletRepository.save(wallet);
+
+        // Initialize portfolio
+        Portfolio portfolio = Portfolio.builder()
+                .user(savedUser)
+                .cashBalance(BigDecimal.ZERO)
+                .initialCapital(BigDecimal.ZERO)
+                .currency(appProperties.getPortfolio().getDefaultCurrency())
+                .build();
+        portfolioRepository.save(portfolio);
+
+        return savedUser;
     }
 
     @Transactional

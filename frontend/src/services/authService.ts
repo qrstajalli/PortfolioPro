@@ -46,6 +46,10 @@ export const authService = {
     localStorage.setItem('portfoliopro_user', JSON.stringify(authResponse.user))
   },
 
+  saveToken(token: string): void {
+    localStorage.setItem('portfoliopro_token', token)
+  },
+
   clearAuth(): void {
     localStorage.removeItem('portfoliopro_token')
     localStorage.removeItem('portfoliopro_user')

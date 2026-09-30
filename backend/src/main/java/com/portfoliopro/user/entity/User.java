@@ -6,7 +6,8 @@ import lombok.*;
 
 @Entity
 @Table(name = "users", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_users_email", columnNames = "email")
+        @UniqueConstraint(name = "uk_users_email", columnNames = "email"),
+        @UniqueConstraint(name = "uk_users_google_sub", columnNames = "google_sub")
 })
 @Getter
 @Setter
@@ -28,8 +29,18 @@ public class User extends BaseEntity {
     @Column(name = "username", length = 50)
     private String username;
 
-    @Column(name = "password_hash", nullable = false, length = 255)
+    @Column(name = "password_hash", length = 255)
     private String passwordHash;
+
+    @Column(name = "google_sub", unique = true, length = 255)
+    private String googleSub;
+
+    @Column(name = "auth_provider", length = 30)
+    @Builder.Default
+    private String authProvider = "LOCAL";
+
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false, length = 20)

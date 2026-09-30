@@ -5,6 +5,8 @@ export interface User {
   role: string
   enabled: boolean
   createdAt: string
+  authProvider?: string
+  imageUrl?: string
 }
 
 export interface Wallet {

@@ -17,5 +17,7 @@ public class UserDto {
     private String email;
     private String role;
     private Boolean enabled;
+    private String authProvider;
+    private String imageUrl;
     private Instant createdAt;
 }

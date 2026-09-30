@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import {
   LogIn,
@@ -21,7 +21,7 @@ interface LocationState {
 }
 
 export const LoginPage: React.FC = () => {
-  const { login } = useAuth()
+  const { login, loginWithToken } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const locationState = location.state as LocationState | null
@@ -88,6 +88,27 @@ export const LoginPage: React.FC = () => {
     }
   }
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const oauthToken = params.get('oauth_token')
+    const oauthError = params.get('oauth_error')
+
+    if (oauthToken) {
+      setLoading(true)
+      loginWithToken(oauthToken)
+        .then(() => {
+          navigate(redirectTarget, { replace: true })
+        })
+        .catch((err) => {
+          console.error('Failed to process OAuth login:', err)
+          setError('Failed to authenticate with Google. Please try again.')
+          setLoading(false)
+        })
+    } else if (oauthError) {
+      setError(decodeURIComponent(oauthError))
+    }
+  }, [location.search, loginWithToken, navigate, redirectTarget])
+
   return (
     <div className="max-w-md w-full mx-auto my-4 p-6 sm:p-7 rounded-lg border border-slate-200 dark:border-[#1c2638] bg-white dark:bg-[#0c1220] shadow-xl dark:shadow-2xl space-y-5 animate-fade-in text-slate-900 dark:text-slate-100">
       {/* Header */}
@@ -108,6 +129,45 @@ export const LoginPage: React.FC = () => {
           <div className="leading-relaxed font-mono">{error}</div>
         </div>
       )}
+
+      {/* Google OAuth Login */}
+      <button
+        type="button"
+        id="google-login-button"
+        onClick={() => {
+          window.location.href = 'http://localhost:8080/oauth2/authorization/google'
+        }}
+        disabled={loading}
+        className="w-full py-2.5 px-4 bg-white dark:bg-[#111827] hover:bg-slate-50 dark:hover:bg-[#1a2336] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#222f46] font-medium text-xs font-mono rounded shadow-sm transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <svg className="h-4 w-4" viewBox="0 0 24 24">
+          <path
+            fill="#4285F4"
+            d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.15z"
+          />
+          <path
+            fill="#34A853"
+            d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.15C3.26 21.36 7.33 24 12 24z"
+          />
+          <path
+            fill="#FBBC05"
+            d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.24C.45 8.15 0 9.92 0 12s.45 3.85 1.24 5.42l4.04-3.15z"
+          />
+          <path
+            fill="#EA4335"
+            d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+          />
+        </svg>
+        <span>Continue with Google</span>
+      </button>
+
+      {/* Divider */}
+      <div className="relative flex items-center justify-center my-1">
+        <div className="border-t border-slate-200 dark:border-[#1e2a3f] w-full" />
+        <span className="bg-white dark:bg-[#0c1220] px-2.5 text-[10px] font-mono text-slate-400 uppercase tracking-wider relative">
+          or sign in with email
+        </span>
+      </div>
 
       {/* Form */}
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
