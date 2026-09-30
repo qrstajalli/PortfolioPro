@@ -1,59 +1,9 @@
-# PortfolioPro 📈
-
-[![Java](https://img.shields.io/badge/Java-21%20%7C%2025%20LTS-ED8B00?style=flat&logo=openjdk&logoColor=white)](https://www.oracle.com/java/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0.8-6DB33F?style=flat&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
-[![React](https://img.shields.io/badge/React-19.2-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite-8.3-646CFF?style=flat&logo=vite&logoColor=white)](https://vitejs.dev/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-v4-06B6D4?style=flat&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+# PortfolioPro 
 
 **PortfolioPro** is a modern, high-precision simulated stock trading and portfolio management workstation. Designed for retail investors and traders, it provides risk-free simulated equity trading with customizable virtual starting capital configured directly by the user, live market analytics, institutional-grade dark mode, and an extensible architecture designed for real-time market data providers (such as Upstox).
 
 ---
-
-## 🌟 Key Features
-
-- **💼 Configurable Virtual Capital:** Users choose and configure their own virtual paper-trading starting capital during registration or onboarding to match their individual trading strategy.
-- **📊 Real-Time Market Feed Architecture:** Decoupled `MarketDataProvider` abstraction interface supporting mock feeds, with pluggable support for Indian broker APIs (Upstox / NSE / BSE).
-- **📈 Interactive Technical Charts:** Candlestick and area chart visualizations across multiple timeframes (`1D`, `1W`, `1M`, `3M`, `1Y`, `ALL`) with intraday volume tracking.
-- **🔢 High-Precision Monetary Math:** All order totals, cash balances, and Weighted Average Price (WAP) calculations utilize Java `BigDecimal` with `RoundingMode.HALF_UP` to prevent floating-point rounding errors.
-- **🔒 Enterprise Security:** Stateless JWT authentication (Auth0 library), BCrypt password hashing, and role-based endpoint authorization.
-- **🎨 Bloomberg/TradingView Inspired UI:** Built with React 19, Tailwind CSS v4, Lucide icons, responsive navigation, and dynamic dark/light theme switching.
-- **⚡ Dual-Database Support:** Plug-and-play development using an in-memory **H2 database** (`local-h2` profile with web console) or enterprise **MySQL 8.x** via Docker Compose.
-
----
-
-## 🏗️ Architecture & Tech Stack
-
-```
-PortfolioPro/
-├── backend/                  # Java 21+ / Spring Boot 4.x / Maven Wrapper
-├── frontend/                 # React 19 / Vite / TypeScript / Tailwind CSS v4
-└── docker-compose.yml        # MySQL 8.0 container definition
-```
-
-### Backend
-- **Language / Runtime:** Java 21+ (Tested on Java 25 LTS)
-- **Framework:** Spring Boot 4.0.8 (Spring WebMVC, Spring Security, Spring Data JPA)
-- **Database Access:** Hibernate 7.2.x, HikariCP Connection Pool
-- **Databases Supported:** 
-  - H2 In-Memory Database (`jdbc:h2:mem:portfoliopro_dev`)
-  - MySQL 8.x Connector/J
-- **Security:** Stateless JWT with Authorization Bearer header (`com.auth0:java-jwt`)
-- **Build Tool:** Maven Wrapper (`mvnw` / `mvnw.cmd`)
-
-### Frontend
-- **Framework:** React 19 + TypeScript
-- **Tooling & Dev Server:** Vite 8.x
-- **Styling:** Tailwind CSS v4 with custom dark mode design system
-- **Routing:** React Router DOM v7
-- **HTTP Client:** Axios (configured with auto-attaching JWT interceptors and reverse proxy)
-- **Icons:** Lucide React
-
----
-
-## 🚀 Quick Start Guide
+## Quick Start Guide
 
 ### Prerequisites
 1. **Java:** JDK 21 or JDK 25 LTS installed
@@ -247,14 +197,6 @@ public interface MarketDataProvider {
 | `JWT_SECRET` | *32-byte default key* | HMAC256 signature secret for JWT |
 | `JWT_EXPIRATION_MS` | `86400000` (24h) | JWT validity window |
 | `DEFAULT_CURRENCY` | `INR` | Default currency code |
-
----
-
-## 🤝 Contributing
-
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/qrstajalli/PortfolioPro/issues).
-
----
 
 ## 📄 License
 
