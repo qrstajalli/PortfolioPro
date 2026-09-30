@@ -19,7 +19,6 @@ public class AppProperties {
     private Jwt jwt = new Jwt();
     private Auth auth = new Auth();
     private Mail mail = new Mail();
-    private AlphaVantage alphaVantage = new AlphaVantage();
     private TwelveData twelveData = new TwelveData();
 
     @Getter
@@ -27,13 +26,6 @@ public class AppProperties {
     public static class TwelveData {
         private String apiKey = "";
         private String baseUrl = "https://api.twelvedata.com";
-    }
-
-    @Getter
-    @Setter
-    public static class AlphaVantage {
-        private String apiKey = "";
-        private String baseUrl = "https://www.alphavantage.co";
     }
 
     @Getter

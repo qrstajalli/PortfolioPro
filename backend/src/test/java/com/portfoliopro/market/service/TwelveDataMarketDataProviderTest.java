@@ -198,4 +198,36 @@ public class TwelveDataMarketDataProviderTest {
         assertThat(second).isPresent();
         assertThat(second.get().getCurrentPrice()).isEqualByComparingTo(new BigDecimal("329.39999"));
     }
+
+    @Test
+    @DisplayName("Should successfully parse real Twelve Data quote for INFY on NYSE")
+    void testSuccessfulQuoteParsingInfy() {
+        String mockResponse = """
+                {
+                    "symbol": "INFY",
+                    "name": "Infosys Ltd. ADR",
+                    "exchange": "NYSE",
+                    "mic_code": "XNYS",
+                    "currency": "USD",
+                    "datetime": "2026-09-29",
+                    "close": "10.64000",
+                    "previous_close": "10.52000",
+                    "change": "0.12",
+                    "percent_change": "1.14"
+                }
+                """;
+
+        mockServer.expect(requestTo("https://api.twelvedata.com/quote?symbol=INFY&apikey=test-twelve-data-key"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(mockResponse, MediaType.APPLICATION_JSON));
+
+        Optional<StockQuoteDto> quoteOpt = provider.getQuote("INFY");
+
+        assertThat(quoteOpt).isPresent();
+        StockQuoteDto quote = quoteOpt.get();
+        assertThat(quote.getSymbol()).isEqualTo("INFY");
+        assertThat(quote.getName()).isEqualTo("Infosys Ltd. ADR");
+        assertThat(quote.getExchange()).isEqualTo("NYSE");
+        assertThat(quote.getCurrentPrice()).isEqualByComparingTo(new BigDecimal("10.64000"));
+    }
 }

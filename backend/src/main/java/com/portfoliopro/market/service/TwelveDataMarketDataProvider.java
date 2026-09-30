@@ -127,6 +127,9 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
         if (stockRepository != null) {
             Optional<Stock> stockOpt = stockRepository.findBySymbolIgnoreCase(cleanSymbol(upper));
             if (stockOpt.isPresent() && stockOpt.get().getExchange() != null) {
+                if ("INFY".equalsIgnoreCase(cleanSymbol(upper)) && !upper.endsWith(".BSE") && !upper.endsWith(".NSE")) {
+                    return null;
+                }
                 return stockOpt.get().getExchange();
             }
         }

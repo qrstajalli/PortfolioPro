@@ -8,8 +8,8 @@ import java.util.Optional;
 
 /**
  * Abstraction layer for stock quotes and market data.
- * Can be implemented by MockMarketDataProvider, or external providers like
- * AlphaVantage, YahooFinance, TwelveData, etc.
+ * Real implementation provided by TwelveDataMarketDataProvider,
+ * or MockMarketDataProvider for offline/testing scenarios.
  */
 public interface MarketDataProvider {
 
