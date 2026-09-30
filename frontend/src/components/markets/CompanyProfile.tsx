@@ -21,42 +21,46 @@ interface CompanyProfileProps {
 export const CompanyProfile: React.FC<CompanyProfileProps> = ({ stock }) => {
   const profile = getCompanyProfile(stock.symbol, stock)
 
-  const USD_TO_INR = 84
-  const multiplier = stock.exchange === 'NASDAQ' ? USD_TO_INR : 1
-  const currentPriceINR = Number(stock.currentPrice || 0) * multiplier
-  const dayLowINR = Number(stock.dayLow || 0) * multiplier
-  const dayHighINR = Number(stock.dayHigh || 0) * multiplier
-  const prevCloseINR = Number(stock.previousClose || 0) * multiplier
-  const hasValidPrice = currentPriceINR > 0
+  const isUSD = stock.currency === 'USD' || stock.exchange === 'NASDAQ'
+  const currentPrice = Number(stock.currentPrice || 0)
+  const dayLow = Number(stock.dayLow || 0)
+  const dayHigh = Number(stock.dayHigh || 0)
+  const prevClose = Number(stock.previousClose || 0)
+  const hasValidPrice = currentPrice > 0
 
-  const formatINR = (val: number) => {
-    return `₹${Number(val).toLocaleString('en-IN', {
+  const formatPrice = (val: number | undefined | null) => {
+    if (val == null || val <= 0) return '--'
+    const sym = isUSD ? '$' : '₹'
+    const locale = isUSD ? 'en-US' : 'en-IN'
+    return `${sym}${Number(val).toLocaleString(locale, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`
   }
 
-  // Format Market Cap to readable Indian Lakh Crores or Crores
+  // Format Market Cap to readable units
   const formatMarketCap = (marketCap?: number) => {
-    if (!marketCap) return 'N/A'
-    const valINR = marketCap * multiplier
-    if (valINR >= 10000000000000) {
-      return `₹${(valINR / 1000000000000).toFixed(2)} Lakh Cr`
-    } else if (valINR >= 10000000) {
-      return `₹${(valINR / 10000000).toFixed(2)} Cr`
+    if (!marketCap || marketCap <= 0) return 'N/A'
+    if (!isUSD) {
+      if (marketCap >= 10000000000000) return `₹${(marketCap / 1000000000000).toFixed(2)} Lakh Cr`
+      if (marketCap >= 10000000) return `₹${(marketCap / 10000000).toFixed(2)} Cr`
+      return `₹${marketCap.toLocaleString('en-IN')}`
     }
-    return `₹${valINR.toLocaleString('en-IN')}`
+    if (marketCap >= 1000000000000) return `$${(marketCap / 1000000000000).toFixed(2)}T`
+    if (marketCap >= 1000000000) return `$${(marketCap / 1000000000).toFixed(2)}B`
+    if (marketCap >= 1000000) return `$${(marketCap / 1000000).toFixed(1)}M`
+    return `$${marketCap.toLocaleString('en-US')}`
   }
 
-  // 52-Week High & Low in INR
+  // 52-Week High & Low
   const fiftyTwoHigh = profile.fiftyTwoWeekHigh
   const fiftyTwoLow = profile.fiftyTwoWeekLow
   const fiftyTwoPct = hasValidPrice
-    ? Math.min(100, Math.max(0, ((currentPriceINR - fiftyTwoLow) / (fiftyTwoHigh - fiftyTwoLow || 1)) * 100))
+    ? Math.min(100, Math.max(0, ((currentPrice - fiftyTwoLow) / (fiftyTwoHigh - fiftyTwoLow || 1)) * 100))
     : 50
 
-  const dayRangePct = hasValidPrice && dayHighINR > dayLowINR
-    ? Math.min(100, Math.max(0, ((currentPriceINR - dayLowINR) / (dayHighINR - dayLowINR || 1)) * 100))
+  const dayRangePct = hasValidPrice && dayHigh > dayLow
+    ? Math.min(100, Math.max(0, ((currentPrice - dayLow) / (dayHigh - dayLow || 1)) * 100))
     : 50
 
   return (
@@ -144,7 +148,7 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ stock }) => {
             <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
               <Sliders className="h-4 w-4 text-emerald-500 dark:text-emerald-400" /> Price Range Benchmarks
             </span>
-            <span className="text-[10px] text-slate-500">Simulated Quote Precision</span>
+            <span className="text-[10px] text-slate-500">Market Price Benchmarks</span>
           </div>
 
           {/* Today's Range Slider */}
@@ -160,11 +164,11 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ stock }) => {
               />
             </div>
             <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
-              <span>{dayLowINR > 0 ? formatINR(dayLowINR) : '--'}</span>
+              <span>{dayLow > 0 ? formatPrice(dayLow) : '--'}</span>
               <span className="text-slate-900 dark:text-white font-bold">
-                {hasValidPrice ? formatINR(currentPriceINR) : 'Market data unavailable'}
+                {hasValidPrice ? formatPrice(currentPrice) : 'Market data unavailable'}
               </span>
-              <span>{dayHighINR > 0 ? formatINR(dayHighINR) : '--'}</span>
+              <span>{dayHigh > 0 ? formatPrice(dayHigh) : '--'}</span>
             </div>
           </div>
 
@@ -181,11 +185,11 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ stock }) => {
               />
             </div>
             <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
-              <span>{fiftyTwoLow > 0 ? formatINR(fiftyTwoLow) : '--'}</span>
+              <span>{fiftyTwoLow > 0 ? formatPrice(fiftyTwoLow) : '--'}</span>
               <span className="text-slate-900 dark:text-white font-bold">
-                {hasValidPrice ? formatINR(currentPriceINR) : 'Market data unavailable'}
+                {hasValidPrice ? formatPrice(currentPrice) : 'Market data unavailable'}
               </span>
-              <span>{fiftyTwoHigh > 0 ? formatINR(fiftyTwoHigh) : '--'}</span>
+              <span>{fiftyTwoHigh > 0 ? formatPrice(fiftyTwoHigh) : '--'}</span>
             </div>
           </div>
         </div>
@@ -232,13 +236,13 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ stock }) => {
             <div className="py-2.5 flex items-center justify-between">
               <span className="text-slate-500 dark:text-slate-400">Previous Close</span>
               <span className="font-bold text-slate-700 dark:text-slate-300 tabular-nums">
-                {prevCloseINR > 0 ? formatINR(prevCloseINR) : '--'}
+                {prevClose > 0 ? formatPrice(prevClose) : '--'}
               </span>
             </div>
 
             <div className="py-2.5 flex items-center justify-between">
               <span className="text-slate-500 dark:text-slate-400">Exchange Currency</span>
-              <span className="font-bold text-blue-600 dark:text-blue-400">INR (₹) Standardized</span>
+              <span className="font-bold text-blue-600 dark:text-blue-400">{stock.currency || (isUSD ? 'USD ($)' : 'INR (₹)')}</span>
             </div>
           </div>
         </div>

@@ -131,7 +131,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {!isCollapsed && (
             <div className="truncate">
               <span className="text-slate-800 dark:text-slate-300 font-semibold">ENGINE ACTIVE</span>
-              <span className="text-slate-500 block text-[9px]">Simulated NSE/NASDAQ</span>
+              <span className="text-slate-500 block text-[9px]">US MARKET DATA</span>
             </div>
           )}
         </div>

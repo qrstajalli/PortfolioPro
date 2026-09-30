@@ -84,6 +84,7 @@ public class TwelveDataMarketDataProviderTest {
         assertThat(quote.getSymbol()).isEqualTo("AAPL");
         assertThat(quote.getName()).isEqualTo("Apple Inc.");
         assertThat(quote.getCurrentPrice()).isEqualByComparingTo(new BigDecimal("329.39999"));
+        assertThat(quote.getOpen()).isEqualByComparingTo(new BigDecimal("336.97000"));
         assertThat(quote.getPreviousClose()).isEqualByComparingTo(new BigDecimal("338.39999"));
         assertThat(quote.getChange()).isEqualByComparingTo(new BigDecimal("-9"));
         assertThat(quote.getChangePercent()).isEqualByComparingTo(new BigDecimal("-2.65957"));

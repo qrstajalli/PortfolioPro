@@ -38,13 +38,13 @@ export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stoc
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Standardize stock prices to INR
-  const USD_TO_INR = 84
-  const multiplier = stock.exchange === 'NASDAQ' ? USD_TO_INR : 1
-  const currentPriceINR = Number(stock.currentPrice || stock.price || 0) * multiplier
+  const isUSD = stock.currency === 'USD' || stock.exchange === 'NASDAQ'
+  const currentPrice = Number(stock.currentPrice || stock.price || 0)
 
-  const formatINR = (val: number) => {
-    return `₹${Number(val).toLocaleString('en-IN', {
+  const formatPrice = (val: number) => {
+    const sym = isUSD ? '$' : '₹'
+    const locale = isUSD ? 'en-US' : 'en-IN'
+    return `${sym}${Number(val).toLocaleString(locale, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`
@@ -110,10 +110,10 @@ export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stoc
     const targetCandles: HistoricalCandle[] = allCandles.slice(-Math.min(sliceCount, allCandles.length))
 
     return targetCandles.map((c) => {
-      const open = Number(c.open) * multiplier
-      const high = Number(c.high) * multiplier
-      const low = Number(c.low) * multiplier
-      const close = Number(c.close) * multiplier
+      const open = Number(c.open)
+      const high = Number(c.high)
+      const low = Number(c.low)
+      const close = Number(c.close)
       const volume = Number(c.volume || 0)
 
       // Format date label
@@ -135,7 +135,7 @@ export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stoc
         timestamp: c.date,
       }
     })
-  }, [history, timeframe, multiplier])
+  }, [history, timeframe])
 
   // Coordinate mapping for SVG view
   const viewW = 800
@@ -148,8 +148,8 @@ export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stoc
 
   const allLows = chartData.map((d) => d.low)
   const allHighs = chartData.map((d) => d.high)
-  const minPrice = allLows.length > 0 ? Math.min(...allLows) * 0.998 : currentPriceINR * 0.95
-  const maxPrice = allHighs.length > 0 ? Math.max(...allHighs) * 1.002 : currentPriceINR * 1.05
+  const minPrice = allLows.length > 0 ? Math.min(...allLows) * 0.998 : currentPrice * 0.95
+  const maxPrice = allHighs.length > 0 ? Math.max(...allHighs) * 1.002 : currentPrice * 1.05
   const priceRange = maxPrice - minPrice || 1
 
   const maxVolume = chartData.length > 0 ? Math.max(...chartData.map((d) => d.volume)) || 1 : 1
@@ -167,8 +167,8 @@ export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stoc
   })
 
   // Calculate return stats for the current timeframe
-  const startPrice = nodes[0]?.open || currentPriceINR
-  const endPrice = nodes[nodes.length - 1]?.close || currentPriceINR
+  const startPrice = nodes[0]?.open || currentPrice
+  const endPrice = nodes[nodes.length - 1]?.close || currentPrice
   const periodReturn = endPrice - startPrice
   const periodReturnPct = startPrice > 0 ? (periodReturn / startPrice) * 100 : 0
   const isPeriodGain = periodReturn >= 0
@@ -221,8 +221,8 @@ export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stoc
         {/* Left: Current Price & Period Change Info */}
         <div className="flex items-baseline gap-3">
           <span className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tabular-nums tracking-tight">
-            {(activeDisplayNode ? activeDisplayNode.price : currentPriceINR) > 0
-              ? formatINR(activeDisplayNode ? activeDisplayNode.price : currentPriceINR)
+            {(activeDisplayNode ? activeDisplayNode.price : currentPrice) > 0
+              ? formatPrice(activeDisplayNode ? activeDisplayNode.price : currentPrice)
               : 'Market data unavailable'}
           </span>
           {nodes.length > 0 && startPrice > 0 && (
@@ -234,7 +234,7 @@ export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stoc
               {isPeriodGain ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
               <span>
                 {isPeriodGain ? '+' : ''}
-                {formatINR((activeDisplayNode?.price || endPrice) - startPrice)} ({isPeriodGain ? '+' : ''}
+                {formatPrice((activeDisplayNode?.price || endPrice) - startPrice)} ({isPeriodGain ? '+' : ''}
                 {((((activeDisplayNode?.price || endPrice) - startPrice) / startPrice) * 100).toFixed(2)}%)
               </span>
               <span className="text-[10px] text-slate-500 font-normal">in {timeframe}</span>
@@ -294,7 +294,7 @@ export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stoc
         {loading && (
           <div className="flex flex-col items-center gap-2 text-slate-500 text-xs py-16">
             <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-            <span>Loading daily historical series from Alpha Vantage...</span>
+            <span>Loading daily historical series from Twelve Data...</span>
           </div>
         )}
 
@@ -318,10 +318,10 @@ export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stoc
             {hoveredNode && (
               <div className="absolute top-4 left-4 z-20 pointer-events-none bg-white/95 dark:bg-[#070b14]/90 backdrop-blur border border-slate-200 dark:border-[#1c2638] px-3 py-1.5 rounded shadow-lg text-[10px] space-x-3 text-slate-700 dark:text-slate-300">
                 <span className="text-slate-900 dark:text-white font-bold">{hoveredNode.timestamp}</span>
-                <span>O: <span className="text-slate-700 dark:text-slate-100">{formatINR(hoveredNode.open)}</span></span>
-                <span>H: <span className="text-emerald-600 dark:text-emerald-400">{formatINR(hoveredNode.high)}</span></span>
-                <span>L: <span className="text-rose-600 dark:text-rose-400">{formatINR(hoveredNode.low)}</span></span>
-                <span>C: <span className="text-slate-900 dark:text-white font-bold">{formatINR(hoveredNode.close)}</span></span>
+                <span>O: <span className="text-slate-700 dark:text-slate-100">{formatPrice(hoveredNode.open)}</span></span>
+                <span>H: <span className="text-emerald-600 dark:text-emerald-400">{formatPrice(hoveredNode.high)}</span></span>
+                <span>L: <span className="text-rose-600 dark:text-rose-400">{formatPrice(hoveredNode.low)}</span></span>
+                <span>C: <span className="text-slate-900 dark:text-white font-bold">{formatPrice(hoveredNode.close)}</span></span>
                 <span>Vol: <span className="text-blue-600 dark:text-blue-400">{(hoveredNode.volume / 1000).toFixed(0)}k</span></span>
               </div>
             )}
@@ -351,7 +351,7 @@ export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stoc
                   <g key={pct}>
                     <line x1={padX} y1={y} x2={viewW - padX} y2={y} stroke="currentColor" className="text-slate-200 dark:text-[#141d2d]" strokeDasharray="3 3" />
                     <text x={viewW - padX - 4} y={y - 3} fill="currentColor" className="text-slate-400 dark:text-[#475569]" fontSize="8" textAnchor="end">
-                      {formatINR(p)}
+                      {formatPrice(p)}
                     </text>
                   </g>
                 )
@@ -492,18 +492,18 @@ export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stoc
       <div className="p-3 border-t border-slate-200 dark:border-[#182235] bg-slate-50 dark:bg-[#070b14] grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
         <div>
           <span className="text-[10px] text-slate-500 uppercase">Period High</span>
-          <div className="font-bold text-slate-900 dark:text-white mt-0.5">{formatINR(minPrice > 0 ? maxPrice : 0)}</div>
+          <div className="font-bold text-slate-900 dark:text-white mt-0.5">{formatPrice(minPrice > 0 ? maxPrice : 0)}</div>
         </div>
         <div>
           <span className="text-[10px] text-slate-500 uppercase">Period Low</span>
-          <div className="font-bold text-slate-900 dark:text-white mt-0.5">{formatINR(minPrice > 0 ? minPrice : 0)}</div>
+          <div className="font-bold text-slate-900 dark:text-white mt-0.5">{formatPrice(minPrice > 0 ? minPrice : 0)}</div>
         </div>
         <div>
           <span className="text-[10px] text-slate-500 uppercase">Period Return</span>
           <div className={`font-bold mt-0.5 ${isPeriodGain ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
             {nodes.length > 0 ? (
               <>
-                {isPeriodGain ? '+' : ''}{formatINR(periodReturn)} ({isPeriodGain ? '+' : ''}{periodReturnPct.toFixed(2)}%)
+                {isPeriodGain ? '+' : ''}{formatPrice(periodReturn)} ({isPeriodGain ? '+' : ''}{periodReturnPct.toFixed(2)}%)
               </>
             ) : (
               '--'

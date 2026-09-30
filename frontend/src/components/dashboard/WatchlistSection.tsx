@@ -19,7 +19,7 @@ export const WatchlistSection: React.FC<WatchlistSectionProps> = ({
   const [search, setSearch] = useState('')
   const [filterExchange, setFilterExchange] = useState<'ALL' | 'NSE' | 'NASDAQ'>('ALL')
   const [starredSymbols, setStarredSymbols] = useState<Set<string>>(
-    new Set(['RELIANCE', 'TCS', 'NVDA', 'HDFCBANK'])
+    new Set(['AAPL', 'MSFT', 'NVDA', 'AMZN'])
   )
 
   const toggleStar = (symbol: string, e: React.MouseEvent) => {
@@ -47,10 +47,12 @@ export const WatchlistSection: React.FC<WatchlistSectionProps> = ({
     })
   }, [stocks, search, filterExchange])
 
-  const USD_TO_INR = 84
-
-  const formatCurrency = (val: number) => {
-    return `₹${Number(val).toLocaleString('en-IN', {
+  const formatPrice = (val: number | undefined | null, currency?: string) => {
+    if (val == null || val <= 0) return '--'
+    const isUSD = currency === 'USD' || !currency
+    const sym = isUSD ? '$' : '₹'
+    const locale = isUSD ? 'en-US' : 'en-IN'
+    return `${sym}${Number(val).toLocaleString(locale, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`
@@ -121,15 +123,14 @@ export const WatchlistSection: React.FC<WatchlistSectionProps> = ({
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-[#172033]">
             {filteredStocks.map((stock) => {
-              const isPositive = (stock.changeAmount || 0) >= 0
+              const isPositive = (stock.changeAmount ?? stock.change ?? 0) >= 0
               const isStarred = starredSymbols.has(stock.symbol)
               const isSelected = selectedStock?.symbol === stock.symbol
-              const mult = stock.exchange === 'NASDAQ' ? USD_TO_INR : 1
-              const currentPriceINR = Number(stock.currentPrice || 0) * mult
-              const changeAmountINR = Number(stock.changeAmount || 0) * mult
-              const dayLowINR = Number(stock.dayLow || 0) * mult
-              const dayHighINR = Number(stock.dayHigh || 0) * mult
-              const hasValidPrice = currentPriceINR > 0
+              const currentPrice = Number(stock.currentPrice || stock.price || 0)
+              const changeAmount = Number(stock.changeAmount || stock.change || 0)
+              const dayLow = Number(stock.dayLow || 0)
+              const dayHigh = Number(stock.dayHigh || 0)
+              const hasValidPrice = currentPrice > 0
 
               return (
                 <tr
@@ -175,7 +176,7 @@ export const WatchlistSection: React.FC<WatchlistSectionProps> = ({
                   {/* LTP */}
                   <td className="py-2 px-3 text-right font-bold text-slate-900 dark:text-white tabular-nums">
                     {hasValidPrice ? (
-                      formatCurrency(currentPriceINR)
+                      formatPrice(currentPrice, stock.currency)
                     ) : (
                       <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500 italic">
                         Market data unavailable
@@ -194,7 +195,7 @@ export const WatchlistSection: React.FC<WatchlistSectionProps> = ({
                     }`}
                   >
                     {hasValidPrice && stock.changeAmount != null
-                      ? `${isPositive ? '+' : ''}${changeAmountINR.toFixed(2)}`
+                      ? `${isPositive ? '+' : ''}${formatPrice(changeAmount, stock.currency)}`
                       : '--'}
                   </td>
 
@@ -224,13 +225,13 @@ export const WatchlistSection: React.FC<WatchlistSectionProps> = ({
                           className="h-full bg-slate-400 rounded-full"
                           style={{
                             width: `${
-                              hasValidPrice && dayHighINR > dayLowINR
+                              hasValidPrice && dayHigh > dayLow
                                 ? Math.min(
                                     100,
                                     Math.max(
                                       10,
-                                      ((currentPriceINR - dayLowINR) /
-                                        (dayHighINR - dayLowINR || 1)) *
+                                      ((currentPrice - dayLow) /
+                                        (dayHigh - dayLow || 1)) *
                                         100
                                     )
                                   )
@@ -240,8 +241,8 @@ export const WatchlistSection: React.FC<WatchlistSectionProps> = ({
                         />
                       </div>
                       <div className="flex justify-between text-[8px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                        <span>{hasValidPrice && dayLowINR > 0 ? `₹${dayLowINR.toFixed(0)}` : '--'}</span>
-                        <span>{hasValidPrice && dayHighINR > 0 ? `₹${dayHighINR.toFixed(0)}` : '--'}</span>
+                        <span>{hasValidPrice && dayLow > 0 ? formatPrice(dayLow, stock.currency) : '--'}</span>
+                        <span>{hasValidPrice && dayHigh > 0 ? formatPrice(dayHigh, stock.currency) : '--'}</span>
                       </div>
                     </div>
                   </td>

@@ -17,9 +17,12 @@ export const MarketIndices: React.FC<MarketIndicesProps> = ({
   const gainers = quotedStocks.filter((s) => (s.changeAmount ?? s.change ?? 0) >= 0)
   const losers = quotedStocks.filter((s) => (s.changeAmount ?? s.change ?? 0) < 0)
 
-  const formatINR = (val: number | undefined | null) => {
-    if (val == null) return '--'
-    return `₹${Number(val).toLocaleString('en-IN', {
+  const formatPrice = (val: number | undefined | null, currency?: string) => {
+    if (val == null || val <= 0) return '--'
+    const isUSD = currency === 'USD' || !currency
+    const sym = isUSD ? '$' : '₹'
+    const locale = isUSD ? 'en-US' : 'en-IN'
+    return `${sym}${Number(val).toLocaleString(locale, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`
@@ -46,13 +49,13 @@ export const MarketIndices: React.FC<MarketIndicesProps> = ({
 
           <div className="text-slate-600 dark:text-slate-400 flex items-center gap-1.5 text-[11px]">
             <Clock className="h-3 w-3 text-slate-400 dark:text-slate-500" />
-            <span>Alpha Vantage Daily Series</span>
+            <span>Twelve Data Market Feed</span>
           </div>
 
           <span className="text-slate-300 dark:text-slate-600 hidden md:inline">•</span>
 
           <span className="text-[11px] text-slate-500 dark:text-slate-400 hidden md:inline">
-            BSE / NSE Indian & Global Equities
+            US Equities (NASDAQ / NYSE)
           </span>
         </div>
 
@@ -108,7 +111,7 @@ export const MarketIndices: React.FC<MarketIndicesProps> = ({
                       {stock.symbol}
                     </span>
                     <span className="text-[9px] px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700/60">
-                      {stock.exchange || 'BSE'}
+                      {stock.exchange || 'NASDAQ'}
                     </span>
                   </div>
                   <div className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
@@ -121,7 +124,7 @@ export const MarketIndices: React.FC<MarketIndicesProps> = ({
                     {price > 0 ? (
                       <>
                         <div className="text-sm font-bold text-slate-900 dark:text-white tabular-nums tracking-tight">
-                          {formatINR(price)}
+                          {formatPrice(price, stock.currency)}
                         </div>
                         <div
                           className={`text-[10px] flex items-center gap-0.5 font-bold tabular-nums ${
@@ -132,7 +135,7 @@ export const MarketIndices: React.FC<MarketIndicesProps> = ({
                           <span>
                             {isUp ? '+' : ''}
                             {pct.toFixed(2)}% ({isUp ? '+' : ''}
-                            {formatINR(change)})
+                            {formatPrice(change, stock.currency)})
                           </span>
                         </div>
                       </>
@@ -145,8 +148,8 @@ export const MarketIndices: React.FC<MarketIndicesProps> = ({
                 </div>
 
                 <div className="pt-1.5 border-t border-slate-100 dark:border-[#172033] flex justify-between text-[8px] text-slate-500 dark:text-slate-400 tabular-nums">
-                  <span>L: {stock.dayLow ? formatINR(stock.dayLow) : '--'}</span>
-                  <span>H: {stock.dayHigh ? formatINR(stock.dayHigh) : '--'}</span>
+                  <span>L: {stock.dayLow ? formatPrice(stock.dayLow, stock.currency) : '--'}</span>
+                  <span>H: {stock.dayHigh ? formatPrice(stock.dayHigh, stock.currency) : '--'}</span>
                 </div>
               </div>
             )

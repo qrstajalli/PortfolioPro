@@ -18,35 +18,38 @@ interface StockDetailPageProps {
 export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock: initialStock, onBack }) => {
   const [stock, setStock] = useState<StockQuote>(initialStock)
 
-  // Fetch latest quote on detail page mount
+  // Fetch latest quote on detail page mount only if price is missing
   useEffect(() => {
     let isMounted = true
-    marketService
-      .getQuote(initialStock.symbol)
-      .then((fresh) => {
-        if (isMounted && fresh) {
-          setStock(fresh)
-        }
-      })
-      .catch((err) => {
-        console.warn('Could not refresh live quote for detail page:', err.message)
-      })
+    if (!initialStock.currentPrice || Number(initialStock.currentPrice) <= 0) {
+      marketService
+        .getQuote(initialStock.symbol)
+        .then((fresh) => {
+          if (isMounted && fresh) {
+            setStock(fresh)
+          }
+        })
+        .catch((err) => {
+          console.warn('Could not refresh live quote for detail page:', err.message)
+        })
+    }
 
     return () => {
       isMounted = false
     }
-  }, [initialStock.symbol])
+  }, [initialStock.symbol, initialStock.currentPrice])
 
-  const USD_TO_INR = 84
-  const multiplier = stock.exchange === 'NASDAQ' ? USD_TO_INR : 1
-  const currentPriceINR = Number(stock.currentPrice || stock.price || 0) * multiplier
-  const changeAmountINR = Number(stock.changeAmount || stock.change || 0) * multiplier
-  const dayLowINR = Number(stock.dayLow || stock.currentPrice || 0) * multiplier
-  const dayHighINR = Number(stock.dayHigh || stock.currentPrice || 0) * multiplier
+  const isUSD = stock.currency === 'USD' || stock.exchange === 'NASDAQ'
+  const currentPrice = Number(stock.currentPrice || stock.price || 0)
+  const changeAmount = Number(stock.changeAmount || stock.change || 0)
+  const dayLow = Number(stock.dayLow || stock.currentPrice || 0)
+  const dayHigh = Number(stock.dayHigh || stock.currentPrice || 0)
   const isPositive = (stock.changeAmount ?? stock.change ?? 0) >= 0
 
-  const formatINR = (val: number) => {
-    return `₹${Number(val).toLocaleString('en-IN', {
+  const formatPrice = (val: number) => {
+    const sym = isUSD ? '$' : '₹'
+    const locale = isUSD ? 'en-US' : 'en-IN'
+    return `${sym}${Number(val).toLocaleString(locale, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`
@@ -115,10 +118,10 @@ export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock: initial
 
         {/* Right: Price and Daily Change */}
         <div className="text-right space-y-1">
-          {currentPriceINR > 0 ? (
+          {currentPrice > 0 ? (
             <>
               <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tabular-nums">
-                {formatINR(currentPriceINR)}
+                {formatPrice(currentPrice)}
               </div>
               <div
                 className={`text-xs font-bold tabular-nums flex items-center justify-end gap-1 ${
@@ -128,7 +131,7 @@ export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock: initial
                 {isPositive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
                 <span>
                   {isPositive ? '+' : ''}
-                  {formatINR(changeAmountINR)} ({isPositive ? '+' : ''}
+                  {formatPrice(changeAmount)} ({isPositive ? '+' : ''}
                   {stock.changePercent != null ? stock.changePercent.toFixed(2) : '0.00'}%)
                 </span>
                 <span className="text-slate-500 text-[10px] font-normal">
@@ -149,7 +152,7 @@ export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock: initial
         <div className="p-3 rounded bg-white dark:bg-[#090e1a] border border-slate-200 dark:border-[#182338] shadow-xs">
           <span className="text-[10px] text-slate-500 uppercase">Day Range (L - H)</span>
           <div className="text-xs font-bold text-slate-900 dark:text-slate-200 mt-1">
-            {formatINR(dayLowINR)} - {formatINR(dayHighINR)}
+            {currentPrice > 0 && dayHigh > 0 ? `${formatPrice(dayLow)} - ${formatPrice(dayHigh)}` : '--'}
           </div>
         </div>
         <div className="p-3 rounded bg-white dark:bg-[#090e1a] border border-slate-200 dark:border-[#182338] shadow-xs">
@@ -167,7 +170,7 @@ export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock: initial
         <div className="p-3 rounded bg-white dark:bg-[#090e1a] border border-slate-200 dark:border-[#182338] shadow-xs">
           <span className="text-[10px] text-slate-500 uppercase">Currency</span>
           <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-            {stock.currency || 'INR'}
+            {stock.currency || (isUSD ? 'USD' : 'INR')}
           </div>
         </div>
       </div>

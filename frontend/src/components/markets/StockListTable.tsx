@@ -31,8 +31,6 @@ export const StockListTable: React.FC<StockListTableProps> = ({
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [viewMode, setViewMode] = useState<ViewMode>('table')
 
-  const USD_TO_INR = 84
-
   // Extract all unique sectors for filter pills
   const availableSectors = useMemo(() => {
     const set = new Set<string>()
@@ -69,9 +67,6 @@ export const StockListTable: React.FC<StockListTableProps> = ({
         return true
       })
       .sort((a, b) => {
-        const multA = a.exchange === 'NASDAQ' ? USD_TO_INR : 1
-        const multB = b.exchange === 'NASDAQ' ? USD_TO_INR : 1
-
         let valA = 0
         let valB = 0
 
@@ -81,20 +76,20 @@ export const StockListTable: React.FC<StockListTableProps> = ({
               ? a.symbol.localeCompare(b.symbol)
               : b.symbol.localeCompare(a.symbol)
           case 'price':
-            valA = Number(a.currentPrice) * multA
-            valB = Number(b.currentPrice) * multB
+            valA = Number(a.currentPrice || 0)
+            valB = Number(b.currentPrice || 0)
             break
           case 'change':
-            valA = Number(a.changePercent)
-            valB = Number(b.changePercent)
+            valA = Number(a.changePercent || 0)
+            valB = Number(b.changePercent || 0)
             break
           case 'volume':
-            valA = Number(a.volume)
-            valB = Number(b.volume)
+            valA = Number(a.volume || 0)
+            valB = Number(b.volume || 0)
             break
           case 'marketCap':
-            valA = Number(a.marketCap) * multA
-            valB = Number(b.marketCap) * multB
+            valA = Number(a.marketCap || 0)
+            valB = Number(b.marketCap || 0)
             break
           case 'pe':
             valA = Number(a.peRatio || 0)
@@ -115,23 +110,28 @@ export const StockListTable: React.FC<StockListTableProps> = ({
     }
   }
 
-  const formatINR = (val: number) => {
-    return `₹${Number(val).toLocaleString('en-IN', {
+  const formatPrice = (val: number | undefined | null, currency?: string) => {
+    if (val == null || val <= 0) return '--'
+    const isUSD = currency === 'USD' || !currency
+    const sym = isUSD ? '$' : '₹'
+    const locale = isUSD ? 'en-US' : 'en-IN'
+    return `${sym}${Number(val).toLocaleString(locale, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`
   }
 
-  const formatMarketCap = (marketCap?: number, exchange?: string) => {
-    if (!marketCap) return 'N/A'
-    const mult = exchange === 'NASDAQ' ? USD_TO_INR : 1
-    const valINR = marketCap * mult
-    if (valINR >= 10000000000000) {
-      return `₹${(valINR / 1000000000000).toFixed(1)}L Cr`
-    } else if (valINR >= 10000000) {
-      return `₹${(valINR / 10000000).toFixed(0)} Cr`
+  const formatMarketCap = (marketCap?: number, currency?: string) => {
+    if (!marketCap || marketCap <= 0) return 'N/A'
+    if (currency === 'INR') {
+      if (marketCap >= 10000000000000) return `₹${(marketCap / 1000000000000).toFixed(1)}L Cr`
+      if (marketCap >= 10000000) return `₹${(marketCap / 10000000).toFixed(0)} Cr`
+      return `₹${marketCap.toLocaleString('en-IN')}`
     }
-    return `₹${valINR.toLocaleString('en-IN')}`
+    if (marketCap >= 1000000000000) return `$${(marketCap / 1000000000000).toFixed(2)}T`
+    if (marketCap >= 1000000000) return `$${(marketCap / 1000000000).toFixed(2)}B`
+    if (marketCap >= 1000000) return `$${(marketCap / 1000000).toFixed(1)}M`
+    return `$${marketCap.toLocaleString('en-US')}`
   }
 
   // Mini sparkline generator for each stock row
@@ -238,7 +238,7 @@ export const StockListTable: React.FC<StockListTableProps> = ({
                   : 'bg-slate-100 hover:bg-slate-200 dark:bg-[#080d17] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#1c2638]'
               }`}
             >
-              {ex === 'ALL' ? 'All Exchanges' : ex === 'NASDAQ' ? 'NASDAQ (₹)' : ex}
+              {ex === 'ALL' ? 'All Exchanges' : ex === 'NASDAQ' ? 'NASDAQ (USD)' : ex}
             </button>
           ))}
 
@@ -292,7 +292,7 @@ export const StockListTable: React.FC<StockListTableProps> = ({
                   className="py-2.5 px-3 font-semibold text-right cursor-pointer hover:text-slate-900 dark:hover:text-white transition-colors"
                 >
                   <div className="flex items-center justify-end gap-1">
-                    <span>LTP (INR)</span>
+                    <span>LAST PRICE</span>
                     <ArrowUpDown className="h-2.5 w-2.5" />
                   </div>
                 </th>
@@ -346,11 +346,10 @@ export const StockListTable: React.FC<StockListTableProps> = ({
                 </tr>
               ) : (
                 filteredAndSortedStocks.map((stock) => {
-                  const mult = stock.exchange === 'NASDAQ' ? USD_TO_INR : 1
-                  const currentPriceINR = Number(stock.currentPrice) * mult
-                  const changeAmountINR = Number(stock.changeAmount) * mult
-                  const dayLowINR = Number(stock.dayLow) * mult
-                  const dayHighINR = Number(stock.dayHigh) * mult
+                  const currentPrice = Number(stock.currentPrice || 0)
+                  const changeAmount = Number(stock.changeAmount || 0)
+                  const dayLow = Number(stock.dayLow || 0)
+                  const dayHigh = Number(stock.dayHigh || 0)
                   const isPositive = stock.changeAmount >= 0
                   const isSelected = selectedStockSymbol === stock.symbol
 
@@ -358,7 +357,7 @@ export const StockListTable: React.FC<StockListTableProps> = ({
                     100,
                     Math.max(
                       10,
-                      ((currentPriceINR - dayLowINR) / (dayHighINR - dayLowINR || 1)) * 100
+                      ((currentPrice - dayLow) / (dayHigh - dayLow || 1)) * 100
                     )
                   )
 
@@ -390,8 +389,8 @@ export const StockListTable: React.FC<StockListTableProps> = ({
 
                       {/* LTP */}
                       <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white tabular-nums">
-                        {currentPriceINR > 0 ? (
-                          formatINR(currentPriceINR)
+                        {currentPrice > 0 ? (
+                          formatPrice(currentPrice, stock.currency)
                         ) : (
                           <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500 italic">
                             Market data unavailable
@@ -401,7 +400,7 @@ export const StockListTable: React.FC<StockListTableProps> = ({
 
                       {/* Change */}
                       <td className="py-2.5 px-3 text-right tabular-nums">
-                        {currentPriceINR > 0 ? (
+                        {currentPrice > 0 ? (
                           <>
                             <span
                               className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${
@@ -414,7 +413,7 @@ export const StockListTable: React.FC<StockListTableProps> = ({
                               {(stock.changePercent || 0).toFixed(2)}%
                             </span>
                             <div className={`text-[9px] ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} mt-0.5`}>
-                              {isPositive ? '+' : ''}{formatINR(changeAmountINR)}
+                              {isPositive ? '+' : ''}{formatPrice(changeAmount, stock.currency)}
                             </div>
                           </>
                         ) : (
@@ -424,7 +423,7 @@ export const StockListTable: React.FC<StockListTableProps> = ({
 
                       {/* Day Range Bar */}
                       <td className="py-2.5 px-3 text-center">
-                        {currentPriceINR > 0 && dayHighINR > 0 ? (
+                        {currentPrice > 0 && dayHigh > 0 ? (
                           <div className="w-full max-w-[110px] mx-auto">
                             <div className="h-1.5 w-full bg-slate-200 dark:bg-[#182236] rounded-full overflow-hidden">
                               <div
@@ -433,8 +432,8 @@ export const StockListTable: React.FC<StockListTableProps> = ({
                               />
                             </div>
                             <div className="flex justify-between text-[8px] text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
-                              <span>₹{dayLowINR.toFixed(0)}</span>
-                              <span>₹{dayHighINR.toFixed(0)}</span>
+                              <span>{formatPrice(dayLow, stock.currency)}</span>
+                              <span>{formatPrice(dayHigh, stock.currency)}</span>
                             </div>
                           </div>
                         ) : (
@@ -449,7 +448,7 @@ export const StockListTable: React.FC<StockListTableProps> = ({
 
                       {/* Market Cap */}
                       <td className="py-2.5 px-3 text-right text-slate-700 dark:text-slate-300 tabular-nums">
-                        {formatMarketCap(stock.marketCap, stock.exchange)}
+                        {formatMarketCap(stock.marketCap, stock.currency)}
                       </td>
 
                       {/* P/E Ratio */}
@@ -488,13 +487,12 @@ export const StockListTable: React.FC<StockListTableProps> = ({
       {viewMode === 'cards' && (
         <div className="p-3.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {filteredAndSortedStocks.map((stock) => {
-            const mult = stock.exchange === 'NASDAQ' ? USD_TO_INR : 1
-            const currentPriceINR = Number(stock.currentPrice || 0) * mult
-            const changeAmountINR = Number(stock.changeAmount || 0) * mult
-            const dayLowINR = Number(stock.dayLow || 0) * mult
-            const dayHighINR = Number(stock.dayHigh || 0) * mult
+            const currentPrice = Number(stock.currentPrice || 0)
+            const changeAmount = Number(stock.changeAmount || 0)
+            const dayLow = Number(stock.dayLow || 0)
+            const dayHigh = Number(stock.dayHigh || 0)
             const isPositive = (stock.changeAmount || 0) >= 0
-            const hasValidPrice = currentPriceINR > 0
+            const hasValidPrice = currentPrice > 0
 
             return (
               <div
@@ -545,7 +543,7 @@ export const StockListTable: React.FC<StockListTableProps> = ({
                           : 'text-xs font-normal text-slate-400 dark:text-slate-500 italic'
                       }`}
                     >
-                      {hasValidPrice ? formatINR(currentPriceINR) : 'Market data unavailable'}
+                      {hasValidPrice ? formatPrice(currentPrice, stock.currency) : 'Market data unavailable'}
                     </div>
                     <div
                       className={`text-[10px] tabular-nums ${
@@ -557,7 +555,7 @@ export const StockListTable: React.FC<StockListTableProps> = ({
                       }`}
                     >
                       {hasValidPrice && stock.changeAmount != null
-                        ? `${isPositive ? '+' : ''}${formatINR(changeAmountINR)}`
+                        ? `${isPositive ? '+' : ''}${formatPrice(changeAmount, stock.currency)}`
                         : '--'}
                     </div>
                   </div>
@@ -566,8 +564,8 @@ export const StockListTable: React.FC<StockListTableProps> = ({
 
                 {/* Low / High Footer */}
                 <div className="pt-2 border-t border-slate-100 dark:border-[#162033] flex justify-between text-[9px] text-slate-500 dark:text-slate-400 tabular-nums">
-                  <span>L: {hasValidPrice && dayLowINR > 0 ? `₹${dayLowINR.toFixed(0)}` : '--'}</span>
-                  <span>H: {hasValidPrice && dayHighINR > 0 ? `₹${dayHighINR.toFixed(0)}` : '--'}</span>
+                  <span>L: {hasValidPrice && dayLow > 0 ? formatPrice(dayLow, stock.currency) : '--'}</span>
+                  <span>H: {hasValidPrice && dayHigh > 0 ? formatPrice(dayHigh, stock.currency) : '--'}</span>
                   <span>Vol: {stock.volume != null && stock.volume > 0 ? `${(stock.volume / 1000000).toFixed(1)}M` : '--'}</span>
                 </div>
               </div>

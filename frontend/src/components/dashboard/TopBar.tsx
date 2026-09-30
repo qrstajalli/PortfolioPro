@@ -142,7 +142,7 @@ export const TopBar: React.FC<TopBarProps> = ({ stocks, onSelectStock, onOpenSet
               setIsSearchOpen(true)
             }}
             onFocus={() => setIsSearchOpen(true)}
-            placeholder="Search equities, symbols (e.g. RELIANCE, TCS, NVDA)..."
+            placeholder="Search equities, symbols (e.g. AAPL, MSFT, NVDA)..."
             className="w-full pl-9 pr-14 py-1.5 bg-slate-100 dark:bg-[#0e1422] border border-slate-200 dark:border-[#1e2a3d] hover:border-slate-400 dark:hover:border-slate-600 focus:border-blue-500 rounded text-xs font-mono text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-colors"
           />
           {isSearching ? (
@@ -165,8 +165,11 @@ export const TopBar: React.FC<TopBarProps> = ({ stocks, onSelectStock, onOpenSet
             </div>
             <div className="divide-y divide-slate-100 dark:divide-[#182235]">
               {searchResults.map((stock) => {
-                const isGain = stock.changeAmount >= 0
-                const priceINR = stock.exchange === 'NASDAQ' ? Number(stock.currentPrice) * 84 : Number(stock.currentPrice)
+                const isGain = (stock.changeAmount ?? stock.change ?? 0) >= 0
+                const isUSD = stock.currency === 'USD' || stock.exchange === 'NASDAQ'
+                const price = Number(stock.currentPrice || stock.price || 0)
+                const sym = isUSD ? '$' : '₹'
+                const formattedPrice = price > 0 ? `${sym}${price.toLocaleString(isUSD ? 'en-US' : 'en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : null
                 return (
                   <button
                     key={stock.symbol}
@@ -190,10 +193,10 @@ export const TopBar: React.FC<TopBarProps> = ({ stocks, onSelectStock, onOpenSet
                     </div>
 
                     <div className="text-right font-mono">
-                      {priceINR > 0 ? (
+                      {formattedPrice ? (
                         <>
                           <div className="text-xs font-bold text-slate-900 dark:text-white">
-                            ₹{priceINR.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {formattedPrice}
                           </div>
                           <div
                             className={`text-[10px] flex items-center justify-end gap-0.5 font-semibold ${
@@ -226,8 +229,8 @@ export const TopBar: React.FC<TopBarProps> = ({ stocks, onSelectStock, onOpenSet
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
-          <span className="text-slate-800 dark:text-slate-300 font-semibold">NSE/BSE</span>
-          <span className="text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold">OPEN (SIM)</span>
+          <span className="text-slate-800 dark:text-slate-300 font-semibold">US MARKET DATA</span>
+          <span className="text-amber-600 dark:text-amber-400 text-[11px] font-semibold">DELAYED / LATEST AVAILABLE</span>
         </div>
 
         {/* Simulated Engine Clock */}

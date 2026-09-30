@@ -32,19 +32,13 @@ public class StockDataSeeder implements ApplicationRunner {
 
     public void seedStockUniverse() {
         List<StockSeedDefinition> definitions = List.of(
-                new StockSeedDefinition("RELIANCE", "Reliance Industries Limited", "BSE", "RELIANCE.BSE", "Energy", "Oil & Gas Refining & Marketing"),
-                new StockSeedDefinition("TCS", "Tata Consultancy Services Limited", "BSE", "TCS.BSE", "Information Technology", "IT Consulting & Software"),
-                new StockSeedDefinition("HDFCBANK", "HDFC Bank Limited", "BSE", "HDFCBANK.BSE", "Financial Services", "Private Sector Bank"),
-                new StockSeedDefinition("INFY", "Infosys Limited", "BSE", "INFY.BSE", "Information Technology", "IT Consulting & Software"),
-                new StockSeedDefinition("ICICIBANK", "ICICI Bank Limited", "BSE", "ICICIBANK.BSE", "Financial Services", "Private Sector Bank"),
-                new StockSeedDefinition("SBIN", "State Bank of India", "BSE", "SBIN.BSE", "Financial Services", "Public Sector Bank"),
-                new StockSeedDefinition("BHARTIARTL", "Bharti Airtel Limited", "BSE", "BHARTIARTL.BSE", "Telecommunications", "Telecom Services"),
-                new StockSeedDefinition("ITC", "ITC Limited", "BSE", "ITC.BSE", "Consumer Goods", "Diversified FMCG"),
-                new StockSeedDefinition("KOTAKBANK", "Kotak Mahindra Bank Limited", "BSE", "KOTAKBANK.BSE", "Financial Services", "Private Sector Bank"),
-                new StockSeedDefinition("LT", "Larsen & Toubro Limited", "BSE", "LT.BSE", "Industrials", "Engineering & Construction"),
                 new StockSeedDefinition("AAPL", "Apple Inc.", "NASDAQ", "AAPL", "Technology", "Consumer Electronics"),
                 new StockSeedDefinition("MSFT", "Microsoft Corporation", "NASDAQ", "MSFT", "Technology", "Software - Infrastructure"),
-                new StockSeedDefinition("NVDA", "NVIDIA Corporation", "NASDAQ", "NVDA", "Technology", "Semiconductors")
+                new StockSeedDefinition("NVDA", "NVIDIA Corporation", "NASDAQ", "NVDA", "Technology", "Semiconductors"),
+                new StockSeedDefinition("AMZN", "Amazon.com, Inc.", "NASDAQ", "AMZN", "Consumer Cyclical", "Internet Retail"),
+                new StockSeedDefinition("GOOGL", "Alphabet Inc.", "NASDAQ", "GOOGL", "Communication Services", "Internet Content & Information"),
+                new StockSeedDefinition("META", "Meta Platforms, Inc.", "NASDAQ", "META", "Communication Services", "Internet Content & Information"),
+                new StockSeedDefinition("TSLA", "Tesla, Inc.", "NASDAQ", "TSLA", "Consumer Cyclical", "Auto Manufacturers")
         );
 
         int newStocks = 0;
@@ -76,6 +70,10 @@ public class StockDataSeeder implements ApplicationRunner {
                         existing.setSector(def.sector());
                         changed = true;
                     }
+                    if (existing.getIsActive() == null || !existing.getIsActive()) {
+                        existing.setIsActive(true);
+                        changed = true;
+                    }
                     if (changed) {
                         stockRepository.save(existing);
                     }
@@ -99,6 +97,15 @@ public class StockDataSeeder implements ApplicationRunner {
                 newInstruments++;
             }
         }
+
+        // Deactivate any legacy unsupported domestic stocks so only supported foreign stocks are active
+        stockRepository.findAll().forEach(s -> {
+            boolean isTarget = definitions.stream().anyMatch(d -> d.symbol().equalsIgnoreCase(s.getSymbol()));
+            if (!isTarget && (s.getIsActive() == null || s.getIsActive())) {
+                s.setIsActive(false);
+                stockRepository.save(s);
+            }
+        });
 
         if (newStocks > 0 || newInstruments > 0) {
             log.info("StockDataSeeder successfully initialized {} stocks and {} instruments in the database.", newStocks, newInstruments);

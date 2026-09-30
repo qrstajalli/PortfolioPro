@@ -3,6 +3,7 @@ package com.portfoliopro.market.service;
 import com.portfoliopro.market.dto.StockHistoryDto;
 import com.portfoliopro.market.dto.StockQuoteDto;
 import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -11,6 +12,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+@Profile("mock-market")
 @Service
 public class MockMarketDataProvider implements MarketDataProvider {
 

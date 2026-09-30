@@ -19,9 +19,12 @@ export const MarketOverview: React.FC<MarketOverviewProps> = ({ stocks, onSelect
     .filter((s) => (s.changeAmount ?? s.change ?? 0) < 0)
     .sort((a, b) => (a.changePercent || 0) - (b.changePercent || 0))
 
-  const formatINR = (val: number | undefined | null) => {
-    if (val == null) return '--'
-    return `₹${Number(val).toLocaleString('en-IN', {
+  const formatPrice = (val: number | undefined | null, currency?: string) => {
+    if (val == null || val <= 0) return '--'
+    const isUSD = currency === 'USD' || !currency
+    const sym = isUSD ? '$' : '₹'
+    const locale = isUSD ? 'en-US' : 'en-IN'
+    return `${sym}${Number(val).toLocaleString(locale, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`
@@ -65,14 +68,14 @@ export const MarketOverview: React.FC<MarketOverviewProps> = ({ stocks, onSelect
                   {price > 0 ? (
                     <>
                       <div className="text-base font-bold font-mono text-slate-900 dark:text-white tabular-nums tracking-tight">
-                        {formatINR(price)}
+                        {formatPrice(price, stock.currency)}
                       </div>
                       <div
                         className={`text-[10px] font-mono tabular-nums font-semibold ${
                           isUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                         }`}
                       >
-                        {isUp ? '+' : ''}{formatINR(change)}
+                        {isUp ? '+' : ''}{formatPrice(change, stock.currency)}
                       </div>
                     </>
                   ) : (
@@ -83,8 +86,8 @@ export const MarketOverview: React.FC<MarketOverviewProps> = ({ stocks, onSelect
                 </div>
 
                 <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-[#172033] flex justify-between text-[9px] font-mono text-slate-400 dark:text-slate-500">
-                  <span>L: {stock.dayLow ? formatINR(stock.dayLow) : '--'}</span>
-                  <span>H: {stock.dayHigh ? formatINR(stock.dayHigh) : '--'}</span>
+                  <span>L: {stock.dayLow ? formatPrice(stock.dayLow, stock.currency) : '--'}</span>
+                  <span>H: {stock.dayHigh ? formatPrice(stock.dayHigh, stock.currency) : '--'}</span>
                 </div>
               </div>
             )

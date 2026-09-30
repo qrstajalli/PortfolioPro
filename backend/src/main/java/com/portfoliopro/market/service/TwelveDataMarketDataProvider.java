@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Real Market Data Provider integrating Twelve Data REST API for live & historical equities.
@@ -40,6 +41,10 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
     // 5-minute TTL for quotes, 15-minute TTL for historical data to respect API quota limits
     private static final long QUOTE_CACHE_TTL_MS = 300_000L;
     private static final long HISTORY_CACHE_TTL_MS = 900_000L;
+
+    // 60-second cooldown window when HTTP 429 rate limit is encountered
+    private final AtomicLong rateLimitCooldownUntil = new AtomicLong(0);
+    private static final long RATE_LIMIT_COOLDOWN_MS = 60_000L;
 
     @Value("${TWELVE_DATA_API_KEY:${app.twelve-data.api-key:}}")
     private String envApiKey;
@@ -155,13 +160,20 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
             return Optional.of(cached.quote());
         }
 
+        // 2. Check rate-limit cooldown
+        if (System.currentTimeMillis() < rateLimitCooldownUntil.get()) {
+            log.info("[MarketData] provider=TWELVE_DATA symbol={} endpoint=quote status=COOLDOWN_ACTIVE", clean);
+            if (cached != null) {
+                return Optional.of(cached.quote());
+            }
+            return Optional.empty();
+        }
+
         String apiKey = resolveApiKey();
         if (apiKey == null || apiKey.trim().isEmpty()) {
             log.error("Twelve Data API key is not configured");
             throw new MarketDataException("Twelve Data API key is not configured in environment (TWELVE_DATA_API_KEY)");
         }
-
-        log.info("Requesting live quote from Twelve Data for symbol: {} (exchange: {})", clean, exchange != null ? exchange : "DEFAULT");
 
         try {
             Map<String, Object> root = restClient.get()
@@ -178,7 +190,7 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                     .body(new ParameterizedTypeReference<Map<String, Object>>() {});
 
             if (root == null || root.isEmpty()) {
-                log.warn("Empty response received from Twelve Data for symbol: {}", clean);
+                log.warn("[MarketData] provider=TWELVE_DATA symbol={} endpoint=quote status=EMPTY_RESPONSE", clean);
                 return Optional.empty();
             }
 
@@ -188,7 +200,8 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                 String message = sanitizeMessage(String.valueOf(root.getOrDefault("message", "Unknown Twelve Data error")));
 
                 if (code == 429) {
-                    log.warn("Twelve Data API rate limit reached (429) for symbol: {}", clean);
+                    rateLimitCooldownUntil.set(System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS);
+                    log.warn("[MarketData] provider=TWELVE_DATA symbol={} endpoint=quote status=RATE_LIMIT_429", clean);
                     if (cached != null) {
                         return Optional.of(cached.quote());
                     }
@@ -196,14 +209,14 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                 }
 
                 if (code == 404) {
-                    log.info("Twelve Data symbol unavailable or requires higher tier for symbol {}: {}", clean, message);
+                    log.info("[MarketData] provider=TWELVE_DATA symbol={} endpoint=quote status=NOT_FOUND_404", clean);
                     if (cached != null) {
                         return Optional.of(cached.quote());
                     }
                     return Optional.empty();
                 }
 
-                log.warn("Twelve Data API response code {} for symbol {}: {}", code, clean, message);
+                log.warn("[MarketData] provider=TWELVE_DATA symbol={} endpoint=quote status=ERROR_CODE_{}", clean, code);
                 if (cached != null) {
                     return Optional.of(cached.quote());
                 }
@@ -216,50 +229,34 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                 quoteCache.put(rawSymbol.toUpperCase(), new CachedQuote(quoteDto, System.currentTimeMillis()));
             }
 
-            // Sync latest valid quote with database
-            if (stockRepository != null) {
-                stockRepository.findBySymbolIgnoreCase(clean).ifPresent(s -> {
-                    if (quoteDto.getCurrentPrice() != null) {
-                        s.setCurrentPrice(quoteDto.getCurrentPrice());
-                    }
-                    if (quoteDto.getPreviousClose() != null) {
-                        s.setPreviousClose(quoteDto.getPreviousClose());
-                    }
-                    if (quoteDto.getDayHigh() != null) {
-                        s.setDayHigh(quoteDto.getDayHigh());
-                    }
-                    if (quoteDto.getDayLow() != null) {
-                        s.setDayLow(quoteDto.getDayLow());
-                    }
-                    if (quoteDto.getVolume() != null) {
-                        s.setVolume(quoteDto.getVolume());
-                    }
-                    stockRepository.save(s);
-                });
-            }
+            updateStockEntity(clean, quoteDto);
+            log.info("[MarketData] provider=TWELVE_DATA symbol={} endpoint=quote status=SUCCESS", clean);
 
             return Optional.of(quoteDto);
 
         } catch (RateLimitExceededException | MarketDataException e) {
             throw e;
         } catch (RestClientResponseException e) {
-            log.error("Twelve Data HTTP error status {} for symbol: {}", e.getStatusCode(), clean);
-            if (e.getStatusCode().value() == 429) {
+            int status = e.getStatusCode().value();
+            if (status == 429) {
+                rateLimitCooldownUntil.set(System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS);
+                log.warn("[MarketData] provider=TWELVE_DATA symbol={} endpoint=quote status=RATE_LIMIT_429", clean);
                 if (cached != null) {
                     return Optional.of(cached.quote());
                 }
                 throw new RateLimitExceededException("Twelve Data rate limit reached: HTTP 429");
             }
-            if (e.getStatusCode().value() == 404) {
-                log.info("Twelve Data symbol unavailable or requires higher tier (404) for symbol: {}", clean);
+            if (status == 404) {
+                log.info("[MarketData] provider=TWELVE_DATA symbol={} endpoint=quote status=NOT_FOUND_404", clean);
                 if (cached != null) {
                     return Optional.of(cached.quote());
                 }
                 return Optional.empty();
             }
+            log.error("[MarketData] provider=TWELVE_DATA symbol={} endpoint=quote status=HTTP_ERROR_{}", clean, status);
             throw new MarketDataException("Twelve Data HTTP error: " + e.getStatusCode());
         } catch (Exception e) {
-            log.error("Unexpected error fetching market quote for symbol {}: {}", clean, e.getMessage());
+            log.error("[MarketData] provider=TWELVE_DATA symbol={} endpoint=quote status=UNEXPECTED_ERROR", clean);
             if (cached != null) {
                 return Optional.of(cached.quote());
             }
@@ -268,19 +265,90 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public List<StockQuoteDto> getAllQuotes() {
         if (stockRepository == null) {
             return new ArrayList<>(quoteCache.values().stream().map(CachedQuote::quote).toList());
         }
 
         List<Stock> stocks = stockRepository.findByIsActiveTrue();
-        List<StockQuoteDto> list = new ArrayList<>();
+        List<String> symbolsToFetch = new ArrayList<>();
 
         for (Stock stock : stocks) {
             String symbol = stock.getSymbol();
             CachedQuote cq = quoteCache.get(symbol);
+            if (cq == null || cq.isExpired(QUOTE_CACHE_TTL_MS)) {
+                symbolsToFetch.add(symbol);
+            }
+        }
 
-            if (cq != null && !cq.isExpired(QUOTE_CACHE_TTL_MS)) {
+        // If symbols need fetching and we are not in cooldown, batch fetch from Twelve Data
+        if (!symbolsToFetch.isEmpty() && System.currentTimeMillis() >= rateLimitCooldownUntil.get()) {
+            String apiKey = resolveApiKey();
+            if (apiKey != null && !apiKey.trim().isEmpty()) {
+                String symbolsParam = String.join(",", symbolsToFetch);
+                try {
+                    Map<String, Object> root = restClient.get()
+                            .uri(uriBuilder -> uriBuilder
+                                    .path("/quote")
+                                    .queryParam("symbol", symbolsParam)
+                                    .queryParam("apikey", apiKey.trim())
+                                    .build())
+                            .retrieve()
+                            .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+
+                    if (root != null && !root.isEmpty()) {
+                        if (root.containsKey("code") || "error".equalsIgnoreCase(String.valueOf(root.get("status")))) {
+                            int code = root.get("code") instanceof Number num ? num.intValue() : 400;
+                            if (code == 429) {
+                                rateLimitCooldownUntil.set(System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS);
+                                log.warn("[MarketData] provider=TWELVE_DATA symbol=BATCH endpoint=quote status=RATE_LIMIT_429");
+                            } else {
+                                log.warn("[MarketData] provider=TWELVE_DATA symbol=BATCH endpoint=quote status=ERROR_CODE_{}", code);
+                            }
+                        } else if (root.containsKey("symbol")) {
+                            // Single quote returned
+                            String sym = getString(root, "symbol", symbolsToFetch.get(0));
+                            StockQuoteDto dto = mapToStockQuoteDto(sym, resolveExchange(sym), root);
+                            quoteCache.put(sym.toUpperCase(), new CachedQuote(dto, System.currentTimeMillis()));
+                            updateStockEntity(sym, dto);
+                            log.info("[MarketData] provider=TWELVE_DATA symbol={} endpoint=quote status=SUCCESS", sym);
+                        } else {
+                            // Multi-symbol map returned: {"AAPL": {...}, "MSFT": {...}}
+                            for (Map.Entry<String, Object> entry : root.entrySet()) {
+                                if (entry.getValue() instanceof Map<?, ?> itemMap) {
+                                    Map<String, Object> quoteMap = (Map<String, Object>) itemMap;
+                                    if (quoteMap.containsKey("symbol") && !quoteMap.containsKey("code")) {
+                                        String sym = getString(quoteMap, "symbol", entry.getKey());
+                                        StockQuoteDto dto = mapToStockQuoteDto(sym, resolveExchange(sym), quoteMap);
+                                        quoteCache.put(sym.toUpperCase(), new CachedQuote(dto, System.currentTimeMillis()));
+                                        updateStockEntity(sym, dto);
+                                        log.info("[MarketData] provider=TWELVE_DATA symbol={} endpoint=quote status=SUCCESS", sym);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (RestClientResponseException e) {
+                    if (e.getStatusCode().value() == 429) {
+                        rateLimitCooldownUntil.set(System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS);
+                        log.warn("[MarketData] provider=TWELVE_DATA symbol=BATCH endpoint=quote status=RATE_LIMIT_429");
+                    } else {
+                        log.error("[MarketData] provider=TWELVE_DATA symbol=BATCH endpoint=quote status=HTTP_ERROR_{}", e.getStatusCode().value());
+                    }
+                } catch (Exception e) {
+                    log.error("[MarketData] provider=TWELVE_DATA symbol=BATCH endpoint=quote status=UNEXPECTED_ERROR: {}", e.getMessage());
+                }
+            }
+        }
+
+        // Build result list
+        List<StockQuoteDto> list = new ArrayList<>();
+        for (Stock stock : stocks) {
+            String symbol = stock.getSymbol();
+            CachedQuote cq = quoteCache.get(symbol);
+
+            if (cq != null) {
                 list.add(cq.quote());
             } else {
                 BigDecimal price = (stock.getCurrentPrice() != null && stock.getCurrentPrice().compareTo(BigDecimal.ZERO) > 0)
@@ -302,6 +370,7 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                         .sector(stock.getSector())
                         .currentPrice(price)
                         .price(price)
+                        .open(stock.getCurrentPrice() != null && stock.getCurrentPrice().compareTo(BigDecimal.ZERO) > 0 ? stock.getCurrentPrice() : null)
                         .previousClose(prevClose)
                         .changeAmount(changeAmount)
                         .change(changeAmount)
@@ -312,7 +381,7 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                         .marketCap(stock.getMarketCap())
                         .peRatio(stock.getPeRatio())
                         .isDelayed(true)
-                        .currency(stock.getExchange().equalsIgnoreCase("NASDAQ") ? "USD" : "INR")
+                        .currency(stock.getExchange() != null && stock.getExchange().equalsIgnoreCase("NASDAQ") ? "USD" : "INR")
                         .build();
 
                 list.add(dto);
@@ -474,13 +543,20 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
             return Optional.of(cached.history());
         }
 
+        // 2. Check rate-limit cooldown
+        if (System.currentTimeMillis() < rateLimitCooldownUntil.get()) {
+            log.info("[MarketData] provider=TWELVE_DATA symbol={} endpoint=time_series status=COOLDOWN_ACTIVE", clean);
+            if (cached != null) {
+                return Optional.of(cached.history());
+            }
+            return Optional.empty();
+        }
+
         String apiKey = resolveApiKey();
         if (apiKey == null || apiKey.trim().isEmpty()) {
             log.error("Twelve Data API key is not configured for history");
             throw new MarketDataException("Twelve Data API key is not configured (TWELVE_DATA_API_KEY)");
         }
-
-        log.info("Requesting historical time_series from Twelve Data for symbol: {} (exchange: {})", clean, exchange != null ? exchange : "DEFAULT");
 
         try {
             Map<String, Object> root = restClient.get()
@@ -499,7 +575,7 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                     .body(new ParameterizedTypeReference<Map<String, Object>>() {});
 
             if (root == null || root.isEmpty()) {
-                log.warn("Empty response received from Twelve Data history for symbol: {}", clean);
+                log.warn("[MarketData] provider=TWELVE_DATA symbol={} endpoint=time_series status=EMPTY_RESPONSE", clean);
                 return Optional.empty();
             }
 
@@ -508,7 +584,8 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                 String message = sanitizeMessage(String.valueOf(root.getOrDefault("message", "Unknown Twelve Data error")));
 
                 if (code == 429) {
-                    log.warn("Twelve Data API rate limit reached (429) for history symbol: {}", clean);
+                    rateLimitCooldownUntil.set(System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS);
+                    log.warn("[MarketData] provider=TWELVE_DATA symbol={} endpoint=time_series status=RATE_LIMIT_429", clean);
                     if (cached != null) {
                         return Optional.of(cached.history());
                     }
@@ -516,14 +593,14 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                 }
 
                 if (code == 404) {
-                    log.info("Twelve Data history unavailable or requires higher tier for symbol {}: {}", clean, message);
+                    log.info("[MarketData] provider=TWELVE_DATA symbol={} endpoint=time_series status=NOT_FOUND_404", clean);
                     if (cached != null) {
                         return Optional.of(cached.history());
                     }
                     return Optional.empty();
                 }
 
-                log.warn("Twelve Data history API response code {} for symbol {}: {}", code, clean, message);
+                log.warn("[MarketData] provider=TWELVE_DATA symbol={} endpoint=time_series status=ERROR_CODE_{}", clean, code);
                 if (cached != null) {
                     return Optional.of(cached.history());
                 }
@@ -532,7 +609,7 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
 
             Object valuesObj = root.get("values");
             if (!(valuesObj instanceof List<?> valuesList) || valuesList.isEmpty()) {
-                log.info("No time series values returned by Twelve Data for symbol: {}", clean);
+                log.info("[MarketData] provider=TWELVE_DATA symbol={} endpoint=time_series status=NO_VALUES", clean);
                 return Optional.empty();
             }
 
@@ -557,7 +634,10 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                 }
             }
 
-            String lastRefreshed = candles.isEmpty() ? null : candles.get(0).getDate();
+            // Twelve Data returns newest first. Reverse to chronological order (oldest first).
+            Collections.reverse(candles);
+
+            String lastRefreshed = candles.isEmpty() ? null : candles.get(candles.size() - 1).getDate();
 
             StockHistoryDto historyDto = StockHistoryDto.builder()
                     .symbol(responseSymbol)
@@ -569,28 +649,32 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                     .build();
 
             historyCache.put(clean, new CachedHistory(historyDto, System.currentTimeMillis()));
+            log.info("[MarketData] provider=TWELVE_DATA symbol={} endpoint=time_series status=SUCCESS", clean);
             return Optional.of(historyDto);
 
         } catch (RateLimitExceededException | MarketDataException e) {
             throw e;
         } catch (RestClientResponseException e) {
-            log.error("Twelve Data HTTP error status {} for history: {}", e.getStatusCode(), clean);
-            if (e.getStatusCode().value() == 429) {
+            int status = e.getStatusCode().value();
+            if (status == 429) {
+                rateLimitCooldownUntil.set(System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS);
+                log.warn("[MarketData] provider=TWELVE_DATA symbol={} endpoint=time_series status=RATE_LIMIT_429", clean);
                 if (cached != null) {
                     return Optional.of(cached.history());
                 }
                 throw new RateLimitExceededException("Twelve Data rate limit reached: HTTP 429");
             }
-            if (e.getStatusCode().value() == 404) {
-                log.info("Twelve Data history unavailable or requires higher tier (404) for symbol: {}", clean);
+            if (status == 404) {
+                log.info("[MarketData] provider=TWELVE_DATA symbol={} endpoint=time_series status=NOT_FOUND_404", clean);
                 if (cached != null) {
                     return Optional.of(cached.history());
                 }
                 return Optional.empty();
             }
+            log.error("[MarketData] provider=TWELVE_DATA symbol={} endpoint=time_series status=HTTP_ERROR_{}", clean, status);
             throw new MarketDataException("Twelve Data HTTP error: " + e.getStatusCode());
         } catch (Exception e) {
-            log.error("Unexpected error fetching market history for symbol {}: {}", clean, e.getMessage());
+            log.error("[MarketData] provider=TWELVE_DATA symbol={} endpoint=time_series status=UNEXPECTED_ERROR", clean);
             if (cached != null) {
                 return Optional.of(cached.history());
             }
@@ -605,6 +689,7 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
         String datetime = getString(map, "datetime", null);
 
         BigDecimal price = parseBigDecimal(map.get("close"));
+        BigDecimal open = parseBigDecimal(map.get("open"));
         BigDecimal prevClose = parseBigDecimal(map.get("previous_close"));
         BigDecimal change = parseBigDecimal(map.get("change"));
         BigDecimal percentChange = parseBigDecimal(map.get("percent_change"));
@@ -635,6 +720,7 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                 .sector(sector)
                 .currentPrice(price)
                 .price(price)
+                .open(open)
                 .previousClose(prevClose)
                 .changeAmount(change)
                 .change(change)
@@ -646,6 +732,32 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                 .isDelayed(!isMarketOpen)
                 .currency(currency)
                 .build();
+    }
+
+    private void updateStockEntity(String symbol, StockQuoteDto quoteDto) {
+        if (stockRepository == null || symbol == null) return;
+        try {
+            stockRepository.findBySymbolIgnoreCase(symbol).ifPresent(s -> {
+                if (quoteDto.getCurrentPrice() != null) {
+                    s.setCurrentPrice(quoteDto.getCurrentPrice());
+                }
+                if (quoteDto.getPreviousClose() != null) {
+                    s.setPreviousClose(quoteDto.getPreviousClose());
+                }
+                if (quoteDto.getDayHigh() != null) {
+                    s.setDayHigh(quoteDto.getDayHigh());
+                }
+                if (quoteDto.getDayLow() != null) {
+                    s.setDayLow(quoteDto.getDayLow());
+                }
+                if (quoteDto.getVolume() != null) {
+                    s.setVolume(quoteDto.getVolume());
+                }
+                stockRepository.save(s);
+            });
+        } catch (Exception e) {
+            log.warn("Could not sync stock entity for symbol {}: {}", symbol, e.getMessage());
+        }
     }
 
     private String getString(Map<String, Object> map, String key, String defaultVal) {

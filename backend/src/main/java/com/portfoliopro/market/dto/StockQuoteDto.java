@@ -24,6 +24,7 @@ public class StockQuoteDto {
     private String sector;
     private BigDecimal currentPrice;
     private BigDecimal price;
+    private BigDecimal open;
     private BigDecimal previousClose;
     private BigDecimal changeAmount;
     private BigDecimal change;
