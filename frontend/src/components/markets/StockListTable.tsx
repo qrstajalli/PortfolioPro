@@ -390,40 +390,56 @@ export const StockListTable: React.FC<StockListTableProps> = ({
 
                       {/* LTP */}
                       <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white tabular-nums">
-                        {formatINR(currentPriceINR)}
+                        {currentPriceINR > 0 ? (
+                          formatINR(currentPriceINR)
+                        ) : (
+                          <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500 italic">
+                            Market data unavailable
+                          </span>
+                        )}
                       </td>
 
                       {/* Change */}
                       <td className="py-2.5 px-3 text-right tabular-nums">
-                        <span
-                          className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            isPositive
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                              : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
-                          }`}
-                        >
-                          {isPositive ? '+' : ''}
-                          {stock.changePercent.toFixed(2)}%
-                        </span>
-                        <div className={`text-[9px] ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} mt-0.5`}>
-                          {isPositive ? '+' : ''}{formatINR(changeAmountINR)}
-                        </div>
+                        {currentPriceINR > 0 ? (
+                          <>
+                            <span
+                              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                isPositive
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                              }`}
+                            >
+                              {isPositive ? '+' : ''}
+                              {(stock.changePercent || 0).toFixed(2)}%
+                            </span>
+                            <div className={`text-[9px] ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} mt-0.5`}>
+                              {isPositive ? '+' : ''}{formatINR(changeAmountINR)}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-slate-400 dark:text-slate-500 text-xs">--</span>
+                        )}
                       </td>
 
                       {/* Day Range Bar */}
                       <td className="py-2.5 px-3 text-center">
-                        <div className="w-full max-w-[110px] mx-auto">
-                          <div className="h-1.5 w-full bg-slate-200 dark:bg-[#182236] rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-slate-400 dark:bg-slate-400 rounded-full"
-                              style={{ width: `${dayRangePct}%` }}
-                            />
+                        {currentPriceINR > 0 && dayHighINR > 0 ? (
+                          <div className="w-full max-w-[110px] mx-auto">
+                            <div className="h-1.5 w-full bg-slate-200 dark:bg-[#182236] rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-slate-400 dark:bg-slate-400 rounded-full"
+                                style={{ width: `${dayRangePct}%` }}
+                              />
+                            </div>
+                            <div className="flex justify-between text-[8px] text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
+                              <span>₹{dayLowINR.toFixed(0)}</span>
+                              <span>₹{dayHighINR.toFixed(0)}</span>
+                            </div>
                           </div>
-                          <div className="flex justify-between text-[8px] text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
-                            <span>₹{dayLowINR.toFixed(0)}</span>
-                            <span>₹{dayHighINR.toFixed(0)}</span>
-                          </div>
-                        </div>
+                        ) : (
+                          <span className="text-slate-400 dark:text-slate-500 text-[10px]">--</span>
+                        )}
                       </td>
 
                       {/* Volume */}

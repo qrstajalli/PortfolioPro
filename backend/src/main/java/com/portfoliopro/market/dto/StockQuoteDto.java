@@ -20,6 +20,7 @@ public class StockQuoteDto {
     private String company;
     private String exchange;
     private String market;
+    private String providerSymbol;
     private String sector;
     private BigDecimal currentPrice;
     private BigDecimal price;

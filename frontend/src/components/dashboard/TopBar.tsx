@@ -190,17 +190,25 @@ export const TopBar: React.FC<TopBarProps> = ({ stocks, onSelectStock, onOpenSet
                     </div>
 
                     <div className="text-right font-mono">
-                      <div className="text-xs font-bold text-slate-900 dark:text-white">
-                        ₹{priceINR.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                      <div
-                        className={`text-[10px] flex items-center justify-end gap-0.5 font-semibold ${
-                          isGain ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                        }`}
-                      >
-                        {isGain ? '+' : ''}
-                        {stock.changePercent.toFixed(2)}%
-                      </div>
+                      {priceINR > 0 ? (
+                        <>
+                          <div className="text-xs font-bold text-slate-900 dark:text-white">
+                            ₹{priceINR.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <div
+                            className={`text-[10px] flex items-center justify-end gap-0.5 font-semibold ${
+                              isGain ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                            }`}
+                          >
+                            {isGain ? '+' : ''}
+                            {stock.changePercent.toFixed(2)}%
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500 italic">
+                          Market data unavailable
+                        </div>
+                      )}
                     </div>
                   </button>
                 )

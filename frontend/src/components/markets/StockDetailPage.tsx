@@ -115,24 +115,32 @@ export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock: initial
 
         {/* Right: Price and Daily Change */}
         <div className="text-right space-y-1">
-          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tabular-nums">
-            {formatINR(currentPriceINR)}
-          </div>
-          <div
-            className={`text-xs font-bold tabular-nums flex items-center justify-end gap-1 ${
-              isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-            }`}
-          >
-            {isPositive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-            <span>
-              {isPositive ? '+' : ''}
-              {formatINR(changeAmountINR)} ({isPositive ? '+' : ''}
-              {stock.changePercent != null ? stock.changePercent.toFixed(2) : '0.00'}%)
-            </span>
-            <span className="text-slate-500 text-[10px] font-normal">
-              {stock.timestamp ? stock.timestamp : 'Session'}
-            </span>
-          </div>
+          {currentPriceINR > 0 ? (
+            <>
+              <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tabular-nums">
+                {formatINR(currentPriceINR)}
+              </div>
+              <div
+                className={`text-xs font-bold tabular-nums flex items-center justify-end gap-1 ${
+                  isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                }`}
+              >
+                {isPositive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+                <span>
+                  {isPositive ? '+' : ''}
+                  {formatINR(changeAmountINR)} ({isPositive ? '+' : ''}
+                  {stock.changePercent != null ? stock.changePercent.toFixed(2) : '0.00'}%)
+                </span>
+                <span className="text-slate-500 text-[10px] font-normal">
+                  {stock.timestamp ? stock.timestamp : 'Session'}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="text-sm font-medium text-slate-500 dark:text-slate-400 italic">
+              Market data unavailable
+            </div>
+          )}
         </div>
       </div>
 

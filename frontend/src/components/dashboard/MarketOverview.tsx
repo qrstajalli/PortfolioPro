@@ -62,16 +62,24 @@ export const MarketOverview: React.FC<MarketOverviewProps> = ({ stocks, onSelect
                 </div>
 
                 <div className="mt-2">
-                  <div className="text-base font-bold font-mono text-slate-900 dark:text-white tabular-nums tracking-tight">
-                    {formatINR(price)}
-                  </div>
-                  <div
-                    className={`text-[10px] font-mono tabular-nums font-semibold ${
-                      isUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                    }`}
-                  >
-                    {isUp ? '+' : ''}{formatINR(change)}
-                  </div>
+                  {price > 0 ? (
+                    <>
+                      <div className="text-base font-bold font-mono text-slate-900 dark:text-white tabular-nums tracking-tight">
+                        {formatINR(price)}
+                      </div>
+                      <div
+                        className={`text-[10px] font-mono tabular-nums font-semibold ${
+                          isUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                        }`}
+                      >
+                        {isUp ? '+' : ''}{formatINR(change)}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-xs font-medium font-mono text-slate-400 dark:text-slate-500 italic py-1">
+                      Market data unavailable
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-[#172033] flex justify-between text-[9px] font-mono text-slate-400 dark:text-slate-500">

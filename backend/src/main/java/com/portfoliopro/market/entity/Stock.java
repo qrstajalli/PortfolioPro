@@ -31,6 +31,9 @@ public class Stock extends BaseEntity {
     @Column(name = "exchange", nullable = false, length = 20)
     private String exchange;
 
+    @Column(name = "provider_symbol", length = 30)
+    private String providerSymbol;
+
     @Column(name = "sector", length = 50)
     private String sector;
 
@@ -38,10 +41,12 @@ public class Stock extends BaseEntity {
     private String industry;
 
     @Column(name = "current_price", nullable = false, precision = 19, scale = 4)
-    private BigDecimal currentPrice;
+    @Builder.Default
+    private BigDecimal currentPrice = BigDecimal.ZERO;
 
     @Column(name = "previous_close", nullable = false, precision = 19, scale = 4)
-    private BigDecimal previousClose;
+    @Builder.Default
+    private BigDecimal previousClose = BigDecimal.ZERO;
 
     @Column(name = "day_high", precision = 19, scale = 4)
     private BigDecimal dayHigh;

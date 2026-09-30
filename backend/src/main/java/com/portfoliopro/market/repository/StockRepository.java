@@ -14,6 +14,10 @@ public interface StockRepository extends JpaRepository<Stock, Long> {
 
     Optional<Stock> findBySymbol(String symbol);
 
+    Optional<Stock> findBySymbolIgnoreCase(String symbol);
+
+    Optional<Stock> findByProviderSymbol(String providerSymbol);
+
     boolean existsBySymbol(String symbol);
 
     @Query("SELECT s FROM Stock s WHERE s.isActive = true AND " +

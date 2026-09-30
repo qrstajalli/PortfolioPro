@@ -13,8 +13,9 @@ export const MarketIndices: React.FC<MarketIndicesProps> = ({
   selectedIndexId,
   onSelectIndex,
 }) => {
-  const gainers = stocks.filter((s) => (s.changeAmount ?? s.change ?? 0) >= 0)
-  const losers = stocks.filter((s) => (s.changeAmount ?? s.change ?? 0) < 0)
+  const quotedStocks = stocks.filter((s) => (s.currentPrice ?? s.price ?? 0) > 0)
+  const gainers = quotedStocks.filter((s) => (s.changeAmount ?? s.change ?? 0) >= 0)
+  const losers = quotedStocks.filter((s) => (s.changeAmount ?? s.change ?? 0) < 0)
 
   const formatINR = (val: number | undefined | null) => {
     if (val == null) return '--'
@@ -60,7 +61,7 @@ export const MarketIndices: React.FC<MarketIndicesProps> = ({
           <span className="text-slate-500 flex items-center gap-1">
             <Activity className="h-3 w-3 text-blue-500 dark:text-blue-400" /> Breadth:
           </span>
-          {stocks.length > 0 ? (
+          {quotedStocks.length > 0 ? (
             <>
               <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-bold">
                 ▲ {gainers.length} Advancing
@@ -69,6 +70,10 @@ export const MarketIndices: React.FC<MarketIndicesProps> = ({
                 ▼ {losers.length} Declining
               </span>
             </>
+          ) : stocks.length > 0 ? (
+            <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-bold">
+              {stocks.length} Equities Tracked
+            </span>
           ) : (
             <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold">
               Loading feeds...
@@ -113,21 +118,29 @@ export const MarketIndices: React.FC<MarketIndicesProps> = ({
 
                 <div className="my-2 flex items-baseline justify-between gap-1">
                   <div>
-                    <div className="text-sm font-bold text-slate-900 dark:text-white tabular-nums tracking-tight">
-                      {formatINR(price)}
-                    </div>
-                    <div
-                      className={`text-[10px] flex items-center gap-0.5 font-bold tabular-nums ${
-                        isUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                      }`}
-                    >
-                      {isUp ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
-                      <span>
-                        {isUp ? '+' : ''}
-                        {pct.toFixed(2)}% ({isUp ? '+' : ''}
-                        {formatINR(change)})
-                      </span>
-                    </div>
+                    {price > 0 ? (
+                      <>
+                        <div className="text-sm font-bold text-slate-900 dark:text-white tabular-nums tracking-tight">
+                          {formatINR(price)}
+                        </div>
+                        <div
+                          className={`text-[10px] flex items-center gap-0.5 font-bold tabular-nums ${
+                            isUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                          }`}
+                        >
+                          {isUp ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
+                          <span>
+                            {isUp ? '+' : ''}
+                            {pct.toFixed(2)}% ({isUp ? '+' : ''}
+                            {formatINR(change)})
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-[11px] font-normal text-slate-400 dark:text-slate-500 italic">
+                        Market data unavailable
+                      </div>
+                    )}
                   </div>
                 </div>
 

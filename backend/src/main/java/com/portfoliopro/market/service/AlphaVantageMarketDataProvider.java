@@ -6,7 +6,10 @@ import com.portfoliopro.exception.RateLimitExceededException;
 import com.portfoliopro.market.dto.HistoricalDataPointDto;
 import com.portfoliopro.market.dto.StockHistoryDto;
 import com.portfoliopro.market.dto.StockQuoteDto;
+import com.portfoliopro.market.entity.Stock;
+import com.portfoliopro.market.repository.StockRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
@@ -14,6 +17,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -28,6 +32,7 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
 
     private final AppProperties appProperties;
     private final RestClient restClient;
+    private final StockRepository stockRepository;
     private final Map<String, CachedQuote> quoteCache = new ConcurrentHashMap<>();
     private final Map<String, CachedHistory> historyCache = new ConcurrentHashMap<>();
 
@@ -35,11 +40,17 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
     private static final long QUOTE_CACHE_TTL_MS = 300_000L;
     private static final long HISTORY_CACHE_TTL_MS = 900_000L;
 
-    public AlphaVantageMarketDataProvider(AppProperties appProperties) {
+    @Autowired
+    public AlphaVantageMarketDataProvider(AppProperties appProperties, @Autowired(required = false) StockRepository stockRepository) {
         this.appProperties = appProperties;
+        this.stockRepository = stockRepository;
         this.restClient = RestClient.builder()
                 .baseUrl(appProperties.getAlphaVantage().getBaseUrl())
                 .build();
+    }
+
+    public AlphaVantageMarketDataProvider(AppProperties appProperties) {
+        this(appProperties, null);
     }
 
     @org.springframework.beans.factory.annotation.Value("${ALPHA_VANTAGE_API_KEY:${app.alpha-vantage.api-key:}}")
@@ -94,6 +105,12 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
 
     private String resolveSymbolForAlphaVantage(String symbol) {
         String clean = symbol.trim().toUpperCase();
+        if (stockRepository != null) {
+            Optional<Stock> stockOpt = stockRepository.findBySymbolIgnoreCase(clean);
+            if (stockOpt.isPresent() && stockOpt.get().getProviderSymbol() != null && !stockOpt.get().getProviderSymbol().isBlank()) {
+                return stockOpt.get().getProviderSymbol();
+            }
+        }
         // Known Indian stocks listed on BSE on Alpha Vantage
         Set<String> indianStocks = Set.of("RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL", "ITC", "KOTAKBANK", "LT");
         if (indianStocks.contains(clean) && !clean.contains(".")) {
@@ -178,6 +195,27 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
             StockQuoteDto quoteDto = mapToStockQuoteDto(avSymbol, quoteMap);
             quoteCache.put(cleanSymbol, new CachedQuote(quoteDto, System.currentTimeMillis()));
             quoteCache.put(avSymbol, new CachedQuote(quoteDto, System.currentTimeMillis()));
+
+            if (stockRepository != null) {
+                stockRepository.findBySymbolIgnoreCase(cleanSymbol).ifPresent(s -> {
+                    if (quoteDto.getCurrentPrice() != null) {
+                        s.setCurrentPrice(quoteDto.getCurrentPrice());
+                    }
+                    if (quoteDto.getPreviousClose() != null) {
+                        s.setPreviousClose(quoteDto.getPreviousClose());
+                    }
+                    if (quoteDto.getDayHigh() != null) {
+                        s.setDayHigh(quoteDto.getDayHigh());
+                    }
+                    if (quoteDto.getDayLow() != null) {
+                        s.setDayLow(quoteDto.getDayLow());
+                    }
+                    if (quoteDto.getVolume() != null) {
+                        s.setVolume(quoteDto.getVolume());
+                    }
+                    stockRepository.save(s);
+                });
+            }
             return Optional.of(quoteDto);
 
         } catch (RateLimitExceededException | MarketDataException e) {
@@ -193,19 +231,61 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
 
     @Override
     public List<StockQuoteDto> getAllQuotes() {
-        List<StockQuoteDto> list = new ArrayList<>();
-        try {
-            Optional<StockQuoteDto> relianceQuote = getQuote("RELIANCE.BSE");
-            relianceQuote.ifPresent(list::add);
-        } catch (Exception e) {
-            log.warn("Could not fetch default quote from Alpha Vantage in getAllQuotes: {}", e.getMessage());
+        if (stockRepository == null) {
+            return new ArrayList<>(quoteCache.values().stream().map(CachedQuote::quote).toList());
         }
 
-        for (CachedQuote cq : quoteCache.values()) {
-            if (!list.contains(cq.quote())) {
+        List<Stock> stocks = stockRepository.findByIsActiveTrue();
+        List<StockQuoteDto> list = new ArrayList<>();
+
+        for (Stock stock : stocks) {
+            String symbol = stock.getSymbol();
+            String provSymbol = stock.getProviderSymbol() != null ? stock.getProviderSymbol() : resolveSymbolForAlphaVantage(symbol);
+
+            CachedQuote cq = quoteCache.get(symbol);
+            if (cq == null && !symbol.equals(provSymbol)) {
+                cq = quoteCache.get(provSymbol);
+            }
+
+            if (cq != null && !cq.isExpired(QUOTE_CACHE_TTL_MS)) {
                 list.add(cq.quote());
+            } else {
+                BigDecimal price = (stock.getCurrentPrice() != null && stock.getCurrentPrice().compareTo(BigDecimal.ZERO) > 0)
+                        ? stock.getCurrentPrice() : null;
+                BigDecimal prevClose = (stock.getPreviousClose() != null && stock.getPreviousClose().compareTo(BigDecimal.ZERO) > 0)
+                        ? stock.getPreviousClose() : null;
+                BigDecimal changeAmount = (price != null && prevClose != null) ? price.subtract(prevClose) : null;
+                BigDecimal changePercent = (changeAmount != null && prevClose != null && prevClose.compareTo(BigDecimal.ZERO) != 0)
+                        ? changeAmount.divide(prevClose, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100")).setScale(2, RoundingMode.HALF_UP)
+                        : null;
+
+                StockQuoteDto dto = StockQuoteDto.builder()
+                        .symbol(stock.getSymbol())
+                        .name(stock.getName())
+                        .company(stock.getName())
+                        .exchange(stock.getExchange())
+                        .market(stock.getExchange())
+                        .providerSymbol(provSymbol)
+                        .sector(stock.getSector())
+                        .currentPrice(price)
+                        .price(price)
+                        .previousClose(prevClose)
+                        .changeAmount(changeAmount)
+                        .change(changeAmount)
+                        .changePercent(changePercent)
+                        .dayHigh(stock.getDayHigh())
+                        .dayLow(stock.getDayLow())
+                        .volume(stock.getVolume())
+                        .marketCap(stock.getMarketCap())
+                        .peRatio(stock.getPeRatio())
+                        .isDelayed(true)
+                        .currency(stock.getExchange().equalsIgnoreCase("NASDAQ") ? "USD" : "INR")
+                        .build();
+
+                list.add(dto);
             }
         }
+
         return list;
     }
 
@@ -217,19 +297,74 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
         }
         String cleanQuery = query.trim().toUpperCase();
 
-        // 1. Check existing cached quotes first
-        List<StockQuoteDto> cachedMatches = new ArrayList<>();
+        List<StockQuoteDto> results = new ArrayList<>();
+
+        // 1. Search database stocks first
+        if (stockRepository != null) {
+            List<Stock> matchingStocks = stockRepository.searchStocks(cleanQuery);
+            for (Stock stock : matchingStocks) {
+                String symbol = stock.getSymbol();
+                String provSymbol = stock.getProviderSymbol() != null ? stock.getProviderSymbol() : resolveSymbolForAlphaVantage(symbol);
+
+                CachedQuote cq = quoteCache.get(symbol);
+                if (cq == null && !symbol.equals(provSymbol)) {
+                    cq = quoteCache.get(provSymbol);
+                }
+
+                if (cq != null && !cq.isExpired(QUOTE_CACHE_TTL_MS)) {
+                    results.add(cq.quote());
+                } else {
+                    BigDecimal price = (stock.getCurrentPrice() != null && stock.getCurrentPrice().compareTo(BigDecimal.ZERO) > 0)
+                            ? stock.getCurrentPrice() : null;
+                    BigDecimal prevClose = (stock.getPreviousClose() != null && stock.getPreviousClose().compareTo(BigDecimal.ZERO) > 0)
+                            ? stock.getPreviousClose() : null;
+                    BigDecimal changeAmount = (price != null && prevClose != null) ? price.subtract(prevClose) : null;
+                    BigDecimal changePercent = (changeAmount != null && prevClose != null && prevClose.compareTo(BigDecimal.ZERO) != 0)
+                            ? changeAmount.divide(prevClose, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100")).setScale(2, RoundingMode.HALF_UP)
+                            : null;
+
+                    results.add(StockQuoteDto.builder()
+                            .symbol(stock.getSymbol())
+                            .name(stock.getName())
+                            .company(stock.getName())
+                            .exchange(stock.getExchange())
+                            .market(stock.getExchange())
+                            .providerSymbol(provSymbol)
+                            .sector(stock.getSector())
+                            .currentPrice(price)
+                            .price(price)
+                            .previousClose(prevClose)
+                            .changeAmount(changeAmount)
+                            .change(changeAmount)
+                            .changePercent(changePercent)
+                            .dayHigh(stock.getDayHigh())
+                            .dayLow(stock.getDayLow())
+                            .volume(stock.getVolume())
+                            .marketCap(stock.getMarketCap())
+                            .peRatio(stock.getPeRatio())
+                            .isDelayed(true)
+                            .currency(stock.getExchange().equalsIgnoreCase("NASDAQ") ? "USD" : "INR")
+                            .build());
+                }
+            }
+        }
+
+        if (!results.isEmpty()) {
+            return results;
+        }
+
+        // 2. Check existing cached quotes
         for (CachedQuote cq : quoteCache.values()) {
             StockQuoteDto q = cq.quote();
             if (q.getSymbol().toUpperCase().contains(cleanQuery) ||
                 (q.getName() != null && q.getName().toUpperCase().contains(cleanQuery))) {
-                if (!cachedMatches.contains(q)) {
-                    cachedMatches.add(q);
+                if (!results.contains(q)) {
+                    results.add(q);
                 }
             }
         }
-        if (!cachedMatches.isEmpty()) {
-            return cachedMatches;
+        if (!results.isEmpty()) {
+            return results;
         }
 
         // 2. Query Alpha Vantage SYMBOL_SEARCH
@@ -256,7 +391,7 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
             Object bestMatchesObj = root.get("bestMatches");
             if (bestMatchesObj instanceof List) {
                 List<Map<String, Object>> matches = (List<Map<String, Object>>) bestMatchesObj;
-                List<StockQuoteDto> results = new ArrayList<>();
+                List<StockQuoteDto> remoteResults = new ArrayList<>();
 
                 for (Map<String, Object> match : matches) {
                     String symbol = getString(match, "1. symbol", "");
@@ -294,9 +429,9 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
                         dto.setChangePercent(cached.quote().getChangePercent());
                     }
 
-                    results.add(dto);
+                    remoteResults.add(dto);
                 }
-                return results;
+                return remoteResults;
             }
 
         } catch (Exception e) {
