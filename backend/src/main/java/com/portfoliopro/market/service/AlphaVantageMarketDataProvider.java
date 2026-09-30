@@ -146,19 +146,19 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
             }
 
             if (root.containsKey("Note")) {
-                String note = String.valueOf(root.get("Note"));
+                String note = sanitizeMessage(String.valueOf(root.get("Note")));
                 log.warn("Alpha Vantage API rate limit note received for symbol: {}", avSymbol);
                 throw new RateLimitExceededException("Alpha Vantage rate limit reached: " + note);
             }
 
             if (root.containsKey("Information")) {
-                String info = String.valueOf(root.get("Information"));
+                String info = sanitizeMessage(String.valueOf(root.get("Information")));
                 log.warn("Alpha Vantage API information notice received for symbol: {}", avSymbol);
-                throw new RateLimitExceededException("Alpha Vantage request limit reached: " + info);
+                throw new RateLimitExceededException("Alpha Vantage rate limit reached: " + info);
             }
 
             if (root.containsKey("Error Message")) {
-                String error = String.valueOf(root.get("Error Message"));
+                String error = sanitizeMessage(String.valueOf(root.get("Error Message")));
                 log.error("Alpha Vantage API error received for symbol {}: {}", avSymbol, error);
                 throw new MarketDataException("Alpha Vantage API error: " + error);
             }
@@ -366,19 +366,19 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
             }
 
             if (root.containsKey("Note")) {
-                String note = String.valueOf(root.get("Note"));
+                String note = sanitizeMessage(String.valueOf(root.get("Note")));
                 log.warn("Alpha Vantage API rate limit note received for history symbol: {}", avSymbol);
                 throw new RateLimitExceededException("Alpha Vantage rate limit reached: " + note);
             }
 
             if (root.containsKey("Information")) {
-                String info = String.valueOf(root.get("Information"));
+                String info = sanitizeMessage(String.valueOf(root.get("Information")));
                 log.warn("Alpha Vantage API information notice received for history symbol: {}", avSymbol);
-                throw new RateLimitExceededException("Alpha Vantage request limit reached: " + info);
+                throw new RateLimitExceededException("Alpha Vantage rate limit reached: " + info);
             }
 
             if (root.containsKey("Error Message")) {
-                String error = String.valueOf(root.get("Error Message"));
+                String error = sanitizeMessage(String.valueOf(root.get("Error Message")));
                 log.error("Alpha Vantage API error for history symbol {}: {}", avSymbol, error);
                 throw new MarketDataException("Alpha Vantage API error: " + error);
             }
@@ -539,6 +539,18 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private String sanitizeMessage(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String key = resolveApiKey();
+        String sanitized = raw;
+        if (key != null && !key.isBlank()) {
+            sanitized = sanitized.replace(key, "[REDACTED]");
+        }
+        return sanitized.replaceAll("(?i)(api[_-]?key\\s+(?:as\\s+)?|apikey=)[a-zA-Z0-9]+", "$1[REDACTED]");
     }
 
     private Long parseLong(Object value) {
