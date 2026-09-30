@@ -74,6 +74,9 @@ app:
   mail:
     from: ${MAIL_FROM:noreply@portfoliopro.com}
     frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  twelve-data:
+    api-key: ${TWELVE_DATA_API_KEY:}
+    base-url: ${TWELVE_DATA_BASE_URL:https://api.twelvedata.com}
   alpha-vantage:
     api-key: ${ALPHA_VANTAGE_API_KEY:}
     base-url: ${ALPHA_VANTAGE_BASE_URL:https://www.alphavantage.co}

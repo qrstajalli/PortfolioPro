@@ -20,6 +20,14 @@ public class AppProperties {
     private Auth auth = new Auth();
     private Mail mail = new Mail();
     private AlphaVantage alphaVantage = new AlphaVantage();
+    private TwelveData twelveData = new TwelveData();
+
+    @Getter
+    @Setter
+    public static class TwelveData {
+        private String apiKey = "";
+        private String baseUrl = "https://api.twelvedata.com";
+    }
 
     @Getter
     @Setter

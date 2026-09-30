@@ -26,8 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Uses real Alpha Vantage API responses without substituting fabricated prices.
  */
 @Slf4j
-@Service
-@Primary
+@Service("alphaVantageMarketDataProvider")
 public class AlphaVantageMarketDataProvider implements MarketDataProvider {
 
     private final AppProperties appProperties;
