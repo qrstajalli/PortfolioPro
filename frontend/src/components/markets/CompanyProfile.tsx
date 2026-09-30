@@ -36,7 +36,8 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ stock }) => {
   }
 
   // Format Market Cap to readable Indian Lakh Crores or Crores
-  const formatMarketCap = (marketCap: number) => {
+  const formatMarketCap = (marketCap?: number) => {
+    if (!marketCap) return 'N/A'
     const valINR = marketCap * multiplier
     if (valINR >= 10000000000000) {
       return `₹${(valINR / 1000000000000).toFixed(2)} Lakh Cr`

@@ -1,5 +1,6 @@
 package com.portfoliopro.market.service;
 
+import com.portfoliopro.market.dto.StockHistoryDto;
 import com.portfoliopro.market.dto.StockQuoteDto;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
@@ -119,5 +120,47 @@ public class MockMarketDataProvider implements MarketDataProvider {
         return quoteCache.values().stream()
                 .filter(quote -> sector.equalsIgnoreCase(quote.getSector()))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public Optional<StockHistoryDto> getHistoricalPrices(String symbol) {
+        if (symbol == null || symbol.isBlank()) {
+            return Optional.empty();
+        }
+        StockQuoteDto quote = quoteCache.get(symbol.toUpperCase());
+        if (quote == null) {
+            return Optional.empty();
+        }
+
+        BigDecimal basePrice = quote.getCurrentPrice() != null ? quote.getCurrentPrice() : new BigDecimal("1000.00");
+        List<com.portfoliopro.market.dto.HistoricalDataPointDto> candles = new ArrayList<>();
+        java.time.LocalDate today = java.time.LocalDate.now();
+
+        for (int i = 29; i >= 0; i--) {
+            java.time.LocalDate date = today.minusDays(i);
+            BigDecimal open = basePrice.multiply(new BigDecimal(0.98 + (i % 5) * 0.01)).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal close = basePrice.multiply(new BigDecimal(0.97 + ((i + 2) % 5) * 0.012)).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal high = open.max(close).multiply(new BigDecimal("1.015")).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal low = open.min(close).multiply(new BigDecimal("0.985")).setScale(2, RoundingMode.HALF_UP);
+            Long volume = 500_000L + (i * 25_000L);
+
+            candles.add(com.portfoliopro.market.dto.HistoricalDataPointDto.builder()
+                    .date(date.toString())
+                    .open(open)
+                    .high(high)
+                    .low(low)
+                    .close(close)
+                    .volume(volume)
+                    .build());
+        }
+
+        return Optional.of(StockHistoryDto.builder()
+                .symbol(quote.getSymbol())
+                .exchange(quote.getExchange())
+                .currency("INR")
+                .lastRefreshed(today.toString())
+                .timeZone("Asia/Kolkata")
+                .candles(candles)
+                .build());
     }
 }

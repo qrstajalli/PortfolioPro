@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import type { StockQuote } from '../../types/auth'
+import marketService from '../../services/marketService'
 
 interface TopBarProps {
   stocks: StockQuote[]
@@ -32,11 +33,41 @@ export const TopBar: React.FC<TopBarProps> = ({ stocks, onSelectStock, onOpenSet
   const searchContainerRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
+  const [apiSearchResults, setApiSearchResults] = useState<StockQuote[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+
   // Real-time clock for market session
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
+
+  // Live backend search with debounce
+  useEffect(() => {
+    const q = searchQuery.trim()
+    if (!q || q.length < 2) {
+      setApiSearchResults([])
+      setIsSearching(false)
+      return
+    }
+
+    setIsSearching(true)
+    const timeoutId = setTimeout(() => {
+      marketService
+        .searchStocks(q)
+        .then((res) => {
+          setApiSearchResults(res)
+        })
+        .catch(() => {
+          setApiSearchResults([])
+        })
+        .finally(() => {
+          setIsSearching(false)
+        })
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [searchQuery])
 
   // Keyboard shortcut listener
   useEffect(() => {
@@ -70,15 +101,24 @@ export const TopBar: React.FC<TopBarProps> = ({ stocks, onSelectStock, onOpenSet
     setTimeout(() => setIsRefreshing(false), 500)
   }
 
-  // Filter stocks matching query
-  const searchResults = searchQuery.trim()
+  // Filter stocks matching query from local stocks + merge with API results
+  const localMatches = searchQuery.trim()
     ? stocks.filter(
         (s) =>
           s.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
           s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          s.sector.toLowerCase().includes(searchQuery.toLowerCase())
+          (s.sector && s.sector.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     : []
+
+  const combinedMap = new Map<string, StockQuote>()
+  localMatches.forEach((s) => combinedMap.set(s.symbol.toUpperCase(), s))
+  apiSearchResults.forEach((s) => {
+    if (!combinedMap.has(s.symbol.toUpperCase())) {
+      combinedMap.set(s.symbol.toUpperCase(), s)
+    }
+  })
+  const searchResults = Array.from(combinedMap.values())
 
   const formattedBalance = wallet
     ? Number(wallet.balance).toLocaleString('en-IN', {
@@ -105,9 +145,16 @@ export const TopBar: React.FC<TopBarProps> = ({ stocks, onSelectStock, onOpenSet
             placeholder="Search equities, symbols (e.g. RELIANCE, TCS, NVDA)..."
             className="w-full pl-9 pr-14 py-1.5 bg-slate-100 dark:bg-[#0e1422] border border-slate-200 dark:border-[#1e2a3d] hover:border-slate-400 dark:hover:border-slate-600 focus:border-blue-500 rounded text-xs font-mono text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-colors"
           />
-          <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 text-[10px] font-mono bg-white dark:bg-[#162033] px-1.5 py-0.5 rounded text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 pointer-events-none">
-            <Command className="h-2.5 w-2.5" /> K
-          </kbd>
+          {isSearching ? (
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] font-mono text-blue-500 dark:text-blue-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
+              <span className="text-[9px]">Searching</span>
+            </div>
+          ) : (
+            <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 text-[10px] font-mono bg-white dark:bg-[#162033] px-1.5 py-0.5 rounded text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 pointer-events-none">
+              <Command className="h-2.5 w-2.5" /> K
+            </kbd>
+          )}
         </div>
 
         {/* Search Results Dropdown */}

@@ -3,6 +3,8 @@ package com.portfoliopro.market.service;
 import com.portfoliopro.config.AppProperties;
 import com.portfoliopro.exception.MarketDataException;
 import com.portfoliopro.exception.RateLimitExceededException;
+import com.portfoliopro.market.dto.HistoricalDataPointDto;
+import com.portfoliopro.market.dto.StockHistoryDto;
 import com.portfoliopro.market.dto.StockQuoteDto;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Primary;
@@ -16,8 +18,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Real Market Data Provider integrating Alpha Vantage API for live Indian & global equities.
- * Uses real API responses without fallback to mock data.
+ * Real Market Data Provider integrating Alpha Vantage API for live & historical equities.
+ * Uses real Alpha Vantage API responses without substituting fabricated prices.
  */
 @Slf4j
 @Service
@@ -27,7 +29,11 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
     private final AppProperties appProperties;
     private final RestClient restClient;
     private final Map<String, CachedQuote> quoteCache = new ConcurrentHashMap<>();
-    private static final long CACHE_TTL_MS = 60_000L; // 1-minute TTL to respect API limits
+    private final Map<String, CachedHistory> historyCache = new ConcurrentHashMap<>();
+
+    // 5-minute TTL for quotes, 15-minute TTL for historical data to respect standard API limits
+    private static final long QUOTE_CACHE_TTL_MS = 300_000L;
+    private static final long HISTORY_CACHE_TTL_MS = 900_000L;
 
     public AlphaVantageMarketDataProvider(AppProperties appProperties) {
         this.appProperties = appProperties;
@@ -86,6 +92,16 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
         return "";
     }
 
+    private String resolveSymbolForAlphaVantage(String symbol) {
+        String clean = symbol.trim().toUpperCase();
+        // Known Indian stocks listed on BSE on Alpha Vantage
+        Set<String> indianStocks = Set.of("RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL", "ITC", "KOTAKBANK", "LT");
+        if (indianStocks.contains(clean) && !clean.contains(".")) {
+            return clean + ".BSE";
+        }
+        return clean;
+    }
+
     @Override
     @SuppressWarnings("unchecked")
     public Optional<StockQuoteDto> getQuote(String symbol) {
@@ -93,9 +109,14 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
             return Optional.empty();
         }
         String cleanSymbol = symbol.trim().toUpperCase();
+        String avSymbol = resolveSymbolForAlphaVantage(cleanSymbol);
 
+        // Check cache for either symbol representation
         CachedQuote cached = quoteCache.get(cleanSymbol);
-        if (cached != null && !cached.isExpired(CACHE_TTL_MS)) {
+        if (cached == null && !cleanSymbol.equals(avSymbol)) {
+            cached = quoteCache.get(avSymbol);
+        }
+        if (cached != null && !cached.isExpired(QUOTE_CACHE_TTL_MS)) {
             log.debug("Returning cached Alpha Vantage quote for symbol: {}", cleanSymbol);
             return Optional.of(cached.quote());
         }
@@ -106,65 +127,66 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
             throw new MarketDataException("Alpha Vantage API key is not configured in environment (ALPHA_VANTAGE_API_KEY)");
         }
 
-        log.info("Requesting live quote from Alpha Vantage for symbol: {}", cleanSymbol);
+        log.info("Requesting live quote from Alpha Vantage for symbol: {}", avSymbol);
 
         try {
             Map<String, Object> root = restClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/query")
                             .queryParam("function", "GLOBAL_QUOTE")
-                            .queryParam("symbol", cleanSymbol)
+                            .queryParam("symbol", avSymbol)
                             .queryParam("apikey", apiKey.trim())
                             .build())
                     .retrieve()
                     .body(new ParameterizedTypeReference<Map<String, Object>>() {});
 
             if (root == null || root.isEmpty()) {
-                log.warn("Empty response received from Alpha Vantage for symbol: {}", cleanSymbol);
+                log.warn("Empty response received from Alpha Vantage for symbol: {}", avSymbol);
                 return Optional.empty();
             }
 
             if (root.containsKey("Note")) {
                 String note = String.valueOf(root.get("Note"));
-                log.warn("Alpha Vantage API rate limit note received for symbol: {}", cleanSymbol);
+                log.warn("Alpha Vantage API rate limit note received for symbol: {}", avSymbol);
                 throw new RateLimitExceededException("Alpha Vantage rate limit reached: " + note);
             }
 
             if (root.containsKey("Information")) {
                 String info = String.valueOf(root.get("Information"));
-                log.warn("Alpha Vantage API information notice received for symbol: {}", cleanSymbol);
+                log.warn("Alpha Vantage API information notice received for symbol: {}", avSymbol);
                 throw new RateLimitExceededException("Alpha Vantage request limit reached: " + info);
             }
 
             if (root.containsKey("Error Message")) {
                 String error = String.valueOf(root.get("Error Message"));
-                log.error("Alpha Vantage API error received for symbol {}: {}", cleanSymbol, error);
+                log.error("Alpha Vantage API error received for symbol {}: {}", avSymbol, error);
                 throw new MarketDataException("Alpha Vantage API error: " + error);
             }
 
             Object quoteObj = root.get("Global Quote");
             if (!(quoteObj instanceof Map)) {
-                log.info("No Global Quote data found for symbol: {}", cleanSymbol);
+                log.info("No Global Quote data found for symbol: {}", avSymbol);
                 return Optional.empty();
             }
 
             Map<String, Object> quoteMap = (Map<String, Object>) quoteObj;
             if (quoteMap.isEmpty()) {
-                log.info("Empty Global Quote map returned for symbol: {}", cleanSymbol);
+                log.info("Empty Global Quote map returned for symbol: {}", avSymbol);
                 return Optional.empty();
             }
 
-            StockQuoteDto quoteDto = mapToStockQuoteDto(cleanSymbol, quoteMap);
+            StockQuoteDto quoteDto = mapToStockQuoteDto(avSymbol, quoteMap);
             quoteCache.put(cleanSymbol, new CachedQuote(quoteDto, System.currentTimeMillis()));
+            quoteCache.put(avSymbol, new CachedQuote(quoteDto, System.currentTimeMillis()));
             return Optional.of(quoteDto);
 
         } catch (RateLimitExceededException | MarketDataException e) {
             throw e;
         } catch (RestClientResponseException e) {
-            log.error("Alpha Vantage HTTP error status {} for symbol: {}", e.getStatusCode(), cleanSymbol);
+            log.error("Alpha Vantage HTTP error status {} for symbol: {}", e.getStatusCode(), avSymbol);
             throw new MarketDataException("Alpha Vantage HTTP error: " + e.getStatusCode());
         } catch (Exception e) {
-            log.error("Unexpected error fetching market quote for symbol {}: {}", cleanSymbol, e.getMessage());
+            log.error("Unexpected error fetching market quote for symbol {}: {}", avSymbol, e.getMessage());
             throw new MarketDataException("Failed to fetch market data: " + e.getMessage(), e);
         }
     }
@@ -188,19 +210,100 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public List<StockQuoteDto> searchStocks(String query) {
         if (query == null || query.trim().isEmpty()) {
             return Collections.emptyList();
         }
         String cleanQuery = query.trim().toUpperCase();
 
+        // 1. Check existing cached quotes first
+        List<StockQuoteDto> cachedMatches = new ArrayList<>();
         for (CachedQuote cq : quoteCache.values()) {
-            if (cq.quote().getSymbol().toUpperCase().contains(cleanQuery) ||
-                (cq.quote().getName() != null && cq.quote().getName().toUpperCase().contains(cleanQuery))) {
-                return List.of(cq.quote());
+            StockQuoteDto q = cq.quote();
+            if (q.getSymbol().toUpperCase().contains(cleanQuery) ||
+                (q.getName() != null && q.getName().toUpperCase().contains(cleanQuery))) {
+                if (!cachedMatches.contains(q)) {
+                    cachedMatches.add(q);
+                }
             }
         }
+        if (!cachedMatches.isEmpty()) {
+            return cachedMatches;
+        }
 
+        // 2. Query Alpha Vantage SYMBOL_SEARCH
+        String apiKey = resolveApiKey();
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        try {
+            Map<String, Object> root = restClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/query")
+                            .queryParam("function", "SYMBOL_SEARCH")
+                            .queryParam("keywords", cleanQuery)
+                            .queryParam("apikey", apiKey.trim())
+                            .build())
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+
+            if (root == null || root.isEmpty() || root.containsKey("Note") || root.containsKey("Information")) {
+                return Collections.emptyList();
+            }
+
+            Object bestMatchesObj = root.get("bestMatches");
+            if (bestMatchesObj instanceof List) {
+                List<Map<String, Object>> matches = (List<Map<String, Object>>) bestMatchesObj;
+                List<StockQuoteDto> results = new ArrayList<>();
+
+                for (Map<String, Object> match : matches) {
+                    String symbol = getString(match, "1. symbol", "");
+                    String name = getString(match, "2. name", symbol);
+                    String region = getString(match, "4. region", "");
+                    String currency = getString(match, "8. currency", "INR");
+
+                    String exchange = "NSE";
+                    if (symbol.contains(".")) {
+                        String[] parts = symbol.split("\\.");
+                        if (parts.length >= 2) {
+                            exchange = parts[1].toUpperCase();
+                        }
+                    } else if (region.toLowerCase().contains("united states")) {
+                        exchange = "NASDAQ";
+                    }
+
+                    StockQuoteDto dto = StockQuoteDto.builder()
+                            .symbol(symbol)
+                            .name(name)
+                            .company(name)
+                            .exchange(exchange)
+                            .market(exchange)
+                            .currency(currency)
+                            .isDelayed(true)
+                            .build();
+
+                    // If we have cached price data, attach it
+                    CachedQuote cached = quoteCache.get(symbol.toUpperCase());
+                    if (cached != null) {
+                        dto.setCurrentPrice(cached.quote().getCurrentPrice());
+                        dto.setPrice(cached.quote().getPrice());
+                        dto.setChangeAmount(cached.quote().getChangeAmount());
+                        dto.setChange(cached.quote().getChange());
+                        dto.setChangePercent(cached.quote().getChangePercent());
+                    }
+
+                    results.add(dto);
+                }
+                return results;
+            }
+
+        } catch (Exception e) {
+            log.warn("SYMBOL_SEARCH call to Alpha Vantage failed: {}", e.getMessage());
+        }
+
+        // Direct quote attempt fallback
         try {
             Optional<StockQuoteDto> direct = getQuote(cleanQuery);
             if (direct.isPresent()) {
@@ -219,6 +322,137 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
                 .toList();
     }
 
+    @Override
+    @SuppressWarnings("unchecked")
+    public Optional<StockHistoryDto> getHistoricalPrices(String symbol) {
+        if (symbol == null || symbol.trim().isEmpty()) {
+            return Optional.empty();
+        }
+        String cleanSymbol = symbol.trim().toUpperCase();
+        String avSymbol = resolveSymbolForAlphaVantage(cleanSymbol);
+
+        // Check history cache
+        CachedHistory cached = historyCache.get(cleanSymbol);
+        if (cached == null && !cleanSymbol.equals(avSymbol)) {
+            cached = historyCache.get(avSymbol);
+        }
+        if (cached != null && !cached.isExpired(HISTORY_CACHE_TTL_MS)) {
+            log.debug("Returning cached historical candles for symbol: {}", cleanSymbol);
+            return Optional.of(cached.history());
+        }
+
+        String apiKey = resolveApiKey();
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            log.error("Alpha Vantage API key is not configured for history");
+            throw new MarketDataException("Alpha Vantage API key is not configured (ALPHA_VANTAGE_API_KEY)");
+        }
+
+        log.info("Requesting historical daily series from Alpha Vantage for symbol: {}", avSymbol);
+
+        try {
+            Map<String, Object> root = restClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/query")
+                            .queryParam("function", "TIME_SERIES_DAILY")
+                            .queryParam("symbol", avSymbol)
+                            .queryParam("apikey", apiKey.trim())
+                            .build())
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+
+            if (root == null || root.isEmpty()) {
+                log.warn("Empty response received from Alpha Vantage history for symbol: {}", avSymbol);
+                return Optional.empty();
+            }
+
+            if (root.containsKey("Note")) {
+                String note = String.valueOf(root.get("Note"));
+                log.warn("Alpha Vantage API rate limit note received for history symbol: {}", avSymbol);
+                throw new RateLimitExceededException("Alpha Vantage rate limit reached: " + note);
+            }
+
+            if (root.containsKey("Information")) {
+                String info = String.valueOf(root.get("Information"));
+                log.warn("Alpha Vantage API information notice received for history symbol: {}", avSymbol);
+                throw new RateLimitExceededException("Alpha Vantage request limit reached: " + info);
+            }
+
+            if (root.containsKey("Error Message")) {
+                String error = String.valueOf(root.get("Error Message"));
+                log.error("Alpha Vantage API error for history symbol {}: {}", avSymbol, error);
+                throw new MarketDataException("Alpha Vantage API error: " + error);
+            }
+
+            Object timeSeriesObj = root.get("Time Series (Daily)");
+            if (!(timeSeriesObj instanceof Map)) {
+                log.info("No Time Series (Daily) found for symbol: {}", avSymbol);
+                return Optional.empty();
+            }
+
+            Map<String, Map<String, Object>> timeSeries = (Map<String, Map<String, Object>>) timeSeriesObj;
+            if (timeSeries.isEmpty()) {
+                return Optional.empty();
+            }
+
+            List<HistoricalDataPointDto> candles = new ArrayList<>();
+            for (Map.Entry<String, Map<String, Object>> entry : timeSeries.entrySet()) {
+                String date = entry.getKey();
+                Map<String, Object> dayData = entry.getValue();
+
+                BigDecimal open = parseBigDecimal(dayData.get("1. open"));
+                BigDecimal high = parseBigDecimal(dayData.get("2. high"));
+                BigDecimal low = parseBigDecimal(dayData.get("3. low"));
+                BigDecimal close = parseBigDecimal(dayData.get("4. close"));
+                Long volume = parseLong(dayData.get("5. volume"));
+
+                candles.add(HistoricalDataPointDto.builder()
+                        .date(date)
+                        .open(open)
+                        .high(high)
+                        .low(low)
+                        .close(close)
+                        .volume(volume)
+                        .build());
+            }
+
+            // Sort chronologically ascending (oldest first)
+            candles.sort(Comparator.comparing(HistoricalDataPointDto::getDate));
+
+            Map<String, Object> metaData = (Map<String, Object>) root.get("Meta Data");
+            String lastRefreshed = metaData != null ? getString(metaData, "3. Last Refreshed", "") : "";
+            String timeZone = metaData != null ? getString(metaData, "5. Time Zone", "Asia/Kolkata") : "Asia/Kolkata";
+
+            String exchange = "BSE";
+            if (avSymbol.contains(".")) {
+                String[] p = avSymbol.split("\\.");
+                if (p.length >= 2) exchange = p[1].toUpperCase();
+            }
+
+            StockHistoryDto historyDto = StockHistoryDto.builder()
+                    .symbol(cleanSymbol)
+                    .exchange(exchange)
+                    .currency("INR")
+                    .lastRefreshed(lastRefreshed)
+                    .timeZone(timeZone)
+                    .candles(candles)
+                    .build();
+
+            historyCache.put(cleanSymbol, new CachedHistory(historyDto, System.currentTimeMillis()));
+            historyCache.put(avSymbol, new CachedHistory(historyDto, System.currentTimeMillis()));
+
+            return Optional.of(historyDto);
+
+        } catch (RateLimitExceededException | MarketDataException e) {
+            throw e;
+        } catch (RestClientResponseException e) {
+            log.error("Alpha Vantage HTTP error status {} for history symbol: {}", e.getStatusCode(), avSymbol);
+            throw new MarketDataException("Alpha Vantage HTTP error: " + e.getStatusCode());
+        } catch (Exception e) {
+            log.error("Unexpected error fetching historical data for symbol {}: {}", avSymbol, e.getMessage());
+            throw new MarketDataException("Failed to fetch historical market data: " + e.getMessage(), e);
+        }
+    }
+
     private StockQuoteDto mapToStockQuoteDto(String requestedSymbol, Map<String, Object> quoteMap) {
         String symbol = getString(quoteMap, "01. symbol", requestedSymbol);
         BigDecimal currentPrice = parseBigDecimal(quoteMap.get("05. price"));
@@ -228,6 +462,7 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
         BigDecimal dayHigh = parseBigDecimal(quoteMap.get("03. high"));
         BigDecimal dayLow = parseBigDecimal(quoteMap.get("04. low"));
         Long volume = parseLong(quoteMap.get("06. volume"));
+        String latestTradingDay = getString(quoteMap, "07. latest trading day", "");
 
         String exchange = "BSE";
         String name = symbol;
@@ -240,19 +475,34 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
         }
         if ("RELIANCE.BSE".equalsIgnoreCase(symbol) || "RELIANCE".equalsIgnoreCase(name)) {
             name = "Reliance Industries Ltd";
+        } else if ("TCS.BSE".equalsIgnoreCase(symbol) || "TCS".equalsIgnoreCase(name)) {
+            name = "Tata Consultancy Services";
+        } else if ("INFY.BSE".equalsIgnoreCase(symbol) || "INFY".equalsIgnoreCase(name)) {
+            name = "Infosys Ltd";
+        } else if ("HDFCBANK.BSE".equalsIgnoreCase(symbol) || "HDFCBANK".equalsIgnoreCase(name)) {
+            name = "HDFC Bank Ltd";
+        } else if ("ICICIBANK.BSE".equalsIgnoreCase(symbol) || "ICICIBANK".equalsIgnoreCase(name)) {
+            name = "ICICI Bank Ltd";
         }
 
         return StockQuoteDto.builder()
                 .symbol(symbol)
                 .name(name)
+                .company(name)
                 .exchange(exchange)
+                .market(exchange)
                 .currentPrice(currentPrice)
+                .price(currentPrice)
                 .previousClose(prevClose)
                 .changeAmount(changeAmount)
+                .change(changeAmount)
                 .changePercent(changePercent)
                 .dayHigh(dayHigh)
                 .dayLow(dayLow)
                 .volume(volume)
+                .timestamp(latestTradingDay)
+                .isDelayed(true)
+                .currency("INR")
                 .build();
     }
 
@@ -307,6 +557,12 @@ public class AlphaVantageMarketDataProvider implements MarketDataProvider {
     }
 
     private record CachedQuote(StockQuoteDto quote, long timestamp) {
+        boolean isExpired(long ttlMs) {
+            return System.currentTimeMillis() - timestamp > ttlMs;
+        }
+    }
+
+    private record CachedHistory(StockHistoryDto history, long timestamp) {
         boolean isExpired(long ttlMs) {
             return System.currentTimeMillis() - timestamp > ttlMs;
         }

@@ -2,6 +2,7 @@ package com.portfoliopro.market.controller;
 
 import com.portfoliopro.common.ApiResponse;
 import com.portfoliopro.exception.ResourceNotFoundException;
+import com.portfoliopro.market.dto.StockHistoryDto;
 import com.portfoliopro.market.dto.StockQuoteDto;
 import com.portfoliopro.market.service.MarketDataProvider;
 import lombok.RequiredArgsConstructor;
@@ -26,18 +27,31 @@ public class MarketController {
         return ResponseEntity.ok(ApiResponse.ok("Market quotes retrieved successfully", quotes));
     }
 
-    @GetMapping("/stocks/search")
-    public ResponseEntity<ApiResponse<List<StockQuoteDto>>> searchStocks(
-            @RequestParam("q") String query) {
-        List<StockQuoteDto> results = marketDataProvider.searchStocks(query);
-        return ResponseEntity.ok(ApiResponse.ok("Search results retrieved successfully", results));
-    }
-
-    @GetMapping("/stocks/{symbol}")
-    public ResponseEntity<ApiResponse<StockQuoteDto>> getStockBySymbol(
+    @GetMapping(value = {"/quote/{symbol}", "/stocks/{symbol}"})
+    public ResponseEntity<ApiResponse<StockQuoteDto>> getStockQuote(
             @PathVariable("symbol") String symbol) {
         StockQuoteDto quote = marketDataProvider.getQuote(symbol)
                 .orElseThrow(() -> new ResourceNotFoundException("Stock quote", "symbol", symbol));
         return ResponseEntity.ok(ApiResponse.ok("Stock quote retrieved successfully", quote));
+    }
+
+    @GetMapping(value = {"/search", "/stocks/search"})
+    public ResponseEntity<ApiResponse<List<StockQuoteDto>>> searchStocks(
+            @RequestParam(value = "query", required = false) String query,
+            @RequestParam(value = "q", required = false) String q) {
+        String searchQuery = (query != null && !query.isBlank()) ? query : q;
+        if (searchQuery == null || searchQuery.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.ok("Search results retrieved successfully", List.of()));
+        }
+        List<StockQuoteDto> results = marketDataProvider.searchStocks(searchQuery);
+        return ResponseEntity.ok(ApiResponse.ok("Search results retrieved successfully", results));
+    }
+
+    @GetMapping("/history/{symbol}")
+    public ResponseEntity<ApiResponse<StockHistoryDto>> getStockHistory(
+            @PathVariable("symbol") String symbol) {
+        StockHistoryDto history = marketDataProvider.getHistoricalPrices(symbol)
+                .orElseThrow(() -> new ResourceNotFoundException("Stock history", "symbol", symbol));
+        return ResponseEntity.ok(ApiResponse.ok("Historical data retrieved successfully", history));
     }
 }

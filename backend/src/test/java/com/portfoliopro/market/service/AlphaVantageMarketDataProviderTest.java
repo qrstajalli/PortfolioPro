@@ -3,6 +3,7 @@ package com.portfoliopro.market.service;
 import com.portfoliopro.config.AppProperties;
 import com.portfoliopro.exception.MarketDataException;
 import com.portfoliopro.exception.RateLimitExceededException;
+import com.portfoliopro.market.dto.StockHistoryDto;
 import com.portfoliopro.market.dto.StockQuoteDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -14,6 +15,7 @@ import org.springframework.web.client.RestClient;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -76,14 +78,105 @@ public class AlphaVantageMarketDataProviderTest {
         StockQuoteDto quote = quoteOpt.get();
         assertThat(quote.getSymbol()).isEqualTo("RELIANCE.BSE");
         assertThat(quote.getName()).isEqualTo("Reliance Industries Ltd");
+        assertThat(quote.getCompany()).isEqualTo("Reliance Industries Ltd");
         assertThat(quote.getExchange()).isEqualTo("BSE");
+        assertThat(quote.getMarket()).isEqualTo("BSE");
         assertThat(quote.getCurrentPrice()).isEqualByComparingTo(new BigDecimal("1198.5000"));
+        assertThat(quote.getPrice()).isEqualByComparingTo(new BigDecimal("1198.5000"));
         assertThat(quote.getPreviousClose()).isEqualByComparingTo(new BigDecimal("1226.0000"));
         assertThat(quote.getChangeAmount()).isEqualByComparingTo(new BigDecimal("-27.5000"));
+        assertThat(quote.getChange()).isEqualByComparingTo(new BigDecimal("-27.5000"));
         assertThat(quote.getChangePercent()).isEqualByComparingTo(new BigDecimal("-2.2431"));
         assertThat(quote.getDayHigh()).isEqualByComparingTo(new BigDecimal("1222.9000"));
         assertThat(quote.getDayLow()).isEqualByComparingTo(new BigDecimal("1196.0500"));
         assertThat(quote.getVolume()).isEqualTo(962615L);
+        assertThat(quote.getTimestamp()).isEqualTo("2026-09-28");
+        assertThat(quote.getIsDelayed()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Should parse historical daily OHLCV series for RELIANCE.BSE")
+    void testHistoricalPricesParsing() {
+        String mockHistoryResponse = """
+                {
+                    "Meta Data": {
+                        "1. Information": "Daily Prices (open, high, low, close) and Volumes",
+                        "2. Symbol": "RELIANCE.BSE",
+                        "3. Last Refreshed": "2026-09-29",
+                        "4. Output Size": "Compact",
+                        "5. Time Zone": "US/Eastern"
+                    },
+                    "Time Series (Daily)": {
+                        "2026-09-29": {
+                            "1. open": "1194.4000",
+                            "2. high": "1198.0000",
+                            "3. low": "1182.0500",
+                            "4. close": "1184.0000",
+                            "5. volume": "866666"
+                        },
+                        "2026-09-28": {
+                            "1. open": "1222.9000",
+                            "2. high": "1222.9000",
+                            "3. low": "1196.0500",
+                            "4. close": "1198.5000",
+                            "5. volume": "962615"
+                        }
+                    }
+                }
+                """;
+
+        mockServer.expect(requestTo("https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=RELIANCE.BSE&apikey=test-key"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(mockHistoryResponse, MediaType.APPLICATION_JSON));
+
+        Optional<StockHistoryDto> historyOpt = provider.getHistoricalPrices("RELIANCE.BSE");
+
+        assertThat(historyOpt).isPresent();
+        StockHistoryDto history = historyOpt.get();
+        assertThat(history.getSymbol()).isEqualTo("RELIANCE.BSE");
+        assertThat(history.getExchange()).isEqualTo("BSE");
+        assertThat(history.getCurrency()).isEqualTo("INR");
+        assertThat(history.getCandles()).hasSize(2);
+        // Verify chronological ordering (oldest first: 2026-09-28 before 2026-09-29)
+        assertThat(history.getCandles().get(0).getDate()).isEqualTo("2026-09-28");
+        assertThat(history.getCandles().get(0).getClose()).isEqualByComparingTo(new BigDecimal("1198.5000"));
+        assertThat(history.getCandles().get(1).getDate()).isEqualTo("2026-09-29");
+        assertThat(history.getCandles().get(1).getClose()).isEqualByComparingTo(new BigDecimal("1184.0000"));
+    }
+
+    @Test
+    @DisplayName("Should successfully parse Alpha Vantage SYMBOL_SEARCH")
+    void testSymbolSearchParsing() {
+        String mockSearchResponse = """
+                {
+                    "bestMatches": [
+                        {
+                            "1. symbol": "RELIANCE.BSE",
+                            "2. name": "Reliance Industries Limited",
+                            "3. type": "Equity",
+                            "4. region": "India/Bombay",
+                            "5. marketOpen": "09:15",
+                            "6. marketClose": "15:30",
+                            "7. timezone": "UTC+5.5",
+                            "8. currency": "INR",
+                            "9. matchScore": "0.8421"
+                        }
+                    ]
+                }
+                """;
+
+        mockServer.expect(requestTo("https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=RELIANCE&apikey=test-key"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(mockSearchResponse, MediaType.APPLICATION_JSON));
+
+        List<StockQuoteDto> results = provider.searchStocks("RELIANCE");
+
+        assertThat(results).isNotEmpty();
+        StockQuoteDto first = results.get(0);
+        assertThat(first.getSymbol()).isEqualTo("RELIANCE.BSE");
+        assertThat(first.getName()).isEqualTo("Reliance Industries Limited");
+        assertThat(first.getExchange()).isEqualTo("BSE");
+        assertThat(first.getCurrency()).isEqualTo("INR");
     }
 
     @Test

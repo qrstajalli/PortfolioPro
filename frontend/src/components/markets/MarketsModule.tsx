@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { RefreshCw, TrendingUp } from 'lucide-react'
-import api from '../../services/api'
-import type { StockQuote, ApiResponse } from '../../types/auth'
+import { RefreshCw, TrendingUp, AlertCircle } from 'lucide-react'
+import marketService from '../../services/marketService'
+import type { StockQuote } from '../../types/auth'
 import MarketIndices from './MarketIndices'
 import StockListTable from './StockListTable'
 import StockDetailPage from './StockDetailPage'
@@ -21,152 +21,37 @@ export const MarketsModule: React.FC<MarketsModuleProps> = ({
 
   const [stocks, setStocks] = useState<StockQuote[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedStock, setSelectedStock] = useState<StockQuote | null>(null)
   const [selectedIndexFilter, setSelectedIndexFilter] = useState<string | null>(null)
 
-  // Fetch stocks from existing MarketDataProvider backend endpoint
+  // Fetch stocks from real MarketDataProvider backend endpoint
   const fetchMarketStocks = async () => {
     setLoading(true)
+    setError(null)
     try {
-      const res = await api.get<ApiResponse<StockQuote[]>>('/market/stocks')
-      if (res.data?.data && res.data.data.length > 0) {
-        setStocks(res.data.data)
+      const data = await marketService.getStocks()
+      setStocks(data)
 
-        // If target symbol passed via URL param or prop
-        const targetSymbol = (params.symbol || initialSymbol)?.toUpperCase()
-        if (targetSymbol) {
-          const match = res.data.data.find((s) => s.symbol.toUpperCase() === targetSymbol)
-          if (match) {
-            setSelectedStock(match)
-          }
+      // If target symbol passed via URL param or prop
+      const targetSymbol = (params.symbol || initialSymbol)?.toUpperCase()
+      if (targetSymbol) {
+        const match = data.find((s) => s.symbol.toUpperCase() === targetSymbol)
+        if (match) {
+          setSelectedStock(match)
+        } else {
+          // Fetch directly from quote endpoint
+          marketService
+            .getQuote(targetSymbol)
+            .then((q) => setSelectedStock(q))
+            .catch(() => {})
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load market quotes from MarketDataProvider:', err)
-      // Fallback baseline quotes if backend is rebooting
-      const fallbackStocks: StockQuote[] = [
-        {
-          symbol: 'RELIANCE',
-          name: 'Reliance Industries Ltd',
-          exchange: 'NSE',
-          sector: 'Energy',
-          currentPrice: 2980.5,
-          previousClose: 2945.0,
-          changeAmount: 35.5,
-          changePercent: 1.21,
-          dayHigh: 3010.0,
-          dayLow: 2930.0,
-          volume: 14500000,
-          marketCap: 20150000000000,
-          peRatio: 28.4,
-        },
-        {
-          symbol: 'TCS',
-          name: 'Tata Consultancy Services',
-          exchange: 'NSE',
-          sector: 'Information Technology',
-          currentPrice: 4210.75,
-          previousClose: 4180.0,
-          changeAmount: 30.75,
-          changePercent: 0.74,
-          dayHigh: 4245.0,
-          dayLow: 4160.0,
-          volume: 8200000,
-          marketCap: 15200000000000,
-          peRatio: 32.1,
-        },
-        {
-          symbol: 'HDFCBANK',
-          name: 'HDFC Bank Ltd',
-          exchange: 'NSE',
-          sector: 'Financial Services',
-          currentPrice: 1650.2,
-          previousClose: 1665.0,
-          changeAmount: -14.8,
-          changePercent: -0.89,
-          dayHigh: 1670.0,
-          dayLow: 1640.0,
-          volume: 18900000,
-          marketCap: 12500000000000,
-          peRatio: 19.5,
-        },
-        {
-          symbol: 'INFY',
-          name: 'Infosys Ltd',
-          exchange: 'NSE',
-          sector: 'Information Technology',
-          currentPrice: 1890.3,
-          previousClose: 1860.5,
-          changeAmount: 29.8,
-          changePercent: 1.6,
-          dayHigh: 1905.0,
-          dayLow: 1850.0,
-          volume: 12400000,
-          marketCap: 7800000000000,
-          peRatio: 27.3,
-        },
-        {
-          symbol: 'ICICIBANK',
-          name: 'ICICI Bank Ltd',
-          exchange: 'NSE',
-          sector: 'Financial Services',
-          currentPrice: 1220.8,
-          previousClose: 1205.0,
-          changeAmount: 15.8,
-          changePercent: 1.31,
-          dayHigh: 1230.0,
-          dayLow: 1198.0,
-          volume: 11200000,
-          marketCap: 8600000000000,
-          peRatio: 18.2,
-        },
-        {
-          symbol: 'AAPL',
-          name: 'Apple Inc.',
-          exchange: 'NASDAQ',
-          sector: 'Technology',
-          currentPrice: 230.5,
-          previousClose: 228.0,
-          changeAmount: 2.5,
-          changePercent: 1.1,
-          dayHigh: 232.0,
-          dayLow: 227.5,
-          volume: 45000000,
-          marketCap: 3500000000000,
-          peRatio: 34.2,
-        },
-        {
-          symbol: 'MSFT',
-          name: 'Microsoft Corporation',
-          exchange: 'NASDAQ',
-          sector: 'Technology',
-          currentPrice: 445.2,
-          previousClose: 448.0,
-          changeAmount: -2.8,
-          changePercent: -0.63,
-          dayHigh: 450.0,
-          dayLow: 442.1,
-          volume: 22000000,
-          marketCap: 3300000000000,
-          peRatio: 36.8,
-        },
-        {
-          symbol: 'NVDA',
-          name: 'NVIDIA Corporation',
-          exchange: 'NASDAQ',
-          sector: 'Semiconductors',
-          currentPrice: 128.4,
-          previousClose: 124.5,
-          changeAmount: 3.9,
-          changePercent: 3.13,
-          dayHigh: 130.0,
-          dayLow: 123.8,
-          volume: 89000000,
-          marketCap: 3150000000000,
-          peRatio: 55.4,
-        },
-      ]
-      setStocks(fallbackStocks)
+      const msg = err.response?.data?.message || 'Failed to connect to market data provider.'
+      setError(msg)
+      setStocks([])
     } finally {
       setLoading(false)
     }
@@ -179,10 +64,15 @@ export const MarketsModule: React.FC<MarketsModuleProps> = ({
   // Sync if params.symbol or initialSymbol changes
   useEffect(() => {
     const target = (params.symbol || initialSymbol)?.toUpperCase()
-    if (target && stocks.length > 0) {
+    if (target) {
       const match = stocks.find((s) => s.symbol.toUpperCase() === target)
       if (match) {
         setSelectedStock(match)
+      } else {
+        marketService
+          .getQuote(target)
+          .then((q) => setSelectedStock(q))
+          .catch(() => {})
       }
     }
   }, [params.symbol, initialSymbol, stocks])
@@ -227,6 +117,22 @@ export const MarketsModule: React.FC<MarketsModuleProps> = ({
               <span>Refresh</span>
             </button>
           </div>
+
+          {/* Clean error banner without fake price substitution */}
+          {error && (
+            <div className="p-3 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 flex items-center justify-between text-xs font-mono">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>Market Provider Notice: {error}</span>
+              </div>
+              <button
+                onClick={fetchMarketStocks}
+                className="underline hover:text-amber-900 dark:hover:text-amber-200 cursor-pointer ml-3 font-semibold"
+              >
+                Retry
+              </button>
+            </div>
+          )}
 
           {/* 1. Market Indices & Breadth */}
           <MarketIndices

@@ -122,7 +122,8 @@ export const StockListTable: React.FC<StockListTableProps> = ({
     })}`
   }
 
-  const formatMarketCap = (marketCap: number, exchange: string) => {
+  const formatMarketCap = (marketCap?: number, exchange?: string) => {
+    if (!marketCap) return 'N/A'
     const mult = exchange === 'NASDAQ' ? USD_TO_INR : 1
     const valINR = marketCap * mult
     if (valINR >= 10000000000000) {

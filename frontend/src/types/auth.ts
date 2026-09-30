@@ -37,15 +37,40 @@ export interface ApiResponse<T> {
 export interface StockQuote {
   symbol: string
   name: string
+  company?: string
   exchange: string
+  market?: string
   sector: string
   currentPrice: number
+  price?: number
   previousClose: number
   changeAmount: number
+  change?: number
   changePercent: number
-  dayHigh: number
-  dayLow: number
+  dayHigh?: number
+  dayLow?: number
   volume: number
-  marketCap: number
-  peRatio: number
+  marketCap?: number
+  peRatio?: number
+  timestamp?: string
+  isDelayed?: boolean
+  currency?: string
+}
+
+export interface HistoricalCandle {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume?: number
+}
+
+export interface StockHistory {
+  symbol: string
+  exchange?: string
+  currency?: string
+  lastRefreshed?: string
+  timeZone?: string
+  candles: HistoricalCandle[]
 }

@@ -1,5 +1,6 @@
 package com.portfoliopro.market.service;
 
+import com.portfoliopro.market.dto.StockHistoryDto;
 import com.portfoliopro.market.dto.StockQuoteDto;
 
 import java.util.List;
@@ -19,4 +20,6 @@ public interface MarketDataProvider {
     List<StockQuoteDto> searchStocks(String query);
 
     List<StockQuoteDto> getQuotesBySector(String sector);
+
+    Optional<StockHistoryDto> getHistoricalPrices(String symbol);
 }

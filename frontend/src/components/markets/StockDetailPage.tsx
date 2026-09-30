@@ -1,10 +1,12 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   ArrowLeft,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Clock
 } from 'lucide-react'
 import type { StockQuote } from '../../types/auth'
+import marketService from '../../services/marketService'
 import HistoricalPriceChart from './HistoricalPriceChart'
 import CompanyProfile from './CompanyProfile'
 
@@ -13,14 +15,35 @@ interface StockDetailPageProps {
   onBack: () => void
 }
 
-export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock, onBack }) => {
+export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock: initialStock, onBack }) => {
+  const [stock, setStock] = useState<StockQuote>(initialStock)
+
+  // Fetch latest quote on detail page mount
+  useEffect(() => {
+    let isMounted = true
+    marketService
+      .getQuote(initialStock.symbol)
+      .then((fresh) => {
+        if (isMounted && fresh) {
+          setStock(fresh)
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not refresh live quote for detail page:', err.message)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [initialStock.symbol])
+
   const USD_TO_INR = 84
   const multiplier = stock.exchange === 'NASDAQ' ? USD_TO_INR : 1
-  const currentPriceINR = Number(stock.currentPrice) * multiplier
-  const changeAmountINR = Number(stock.changeAmount) * multiplier
-  const dayLowINR = Number(stock.dayLow) * multiplier
-  const dayHighINR = Number(stock.dayHigh) * multiplier
-  const isPositive = stock.changeAmount >= 0
+  const currentPriceINR = Number(stock.currentPrice || stock.price || 0) * multiplier
+  const changeAmountINR = Number(stock.changeAmount || stock.change || 0) * multiplier
+  const dayLowINR = Number(stock.dayLow || stock.currentPrice || 0) * multiplier
+  const dayHighINR = Number(stock.dayHigh || stock.currentPrice || 0) * multiplier
+  const isPositive = (stock.changeAmount ?? stock.change ?? 0) >= 0
 
   const formatINR = (val: number) => {
     return `₹${Number(val).toLocaleString('en-IN', {
@@ -51,12 +74,19 @@ export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock, onBack 
           </div>
         </div>
 
-        {/* Status indicator */}
+        {/* Status indicator: clearly label as delayed/latest available */}
         <div className="flex items-center gap-2 text-xs">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-bold">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse" />
-            LIVE MARKET DATA
-          </span>
+          {stock.isDelayed !== false ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 text-[11px] font-bold">
+              <Clock className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+              <span>DELAYED / LATEST AVAILABLE {stock.timestamp ? `(${stock.timestamp})` : ''}</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-bold">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse" />
+              LIVE MARKET DATA
+            </span>
+          )}
         </div>
       </div>
 
@@ -71,17 +101,19 @@ export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock, onBack 
             <span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-50 dark:bg-[#142036] text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/30">
               {stock.exchange}
             </span>
-            <span className="px-2 py-0.5 rounded text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60">
-              {stock.sector}
-            </span>
+            {stock.sector && (
+              <span className="px-2 py-0.5 rounded text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60">
+                {stock.sector}
+              </span>
+            )}
           </div>
 
           <div className="text-xs text-slate-600 dark:text-slate-300 font-sans">
-            {stock.name} • High Liquidity Equity
+            {stock.company || stock.name} • Active Equity
           </div>
         </div>
 
-        {/* Right: Live Price and Daily Change */}
+        {/* Right: Price and Daily Change */}
         <div className="text-right space-y-1">
           <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tabular-nums">
             {formatINR(currentPriceINR)}
@@ -95,9 +127,11 @@ export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock, onBack 
             <span>
               {isPositive ? '+' : ''}
               {formatINR(changeAmountINR)} ({isPositive ? '+' : ''}
-              {stock.changePercent.toFixed(2)}%)
+              {stock.changePercent != null ? stock.changePercent.toFixed(2) : '0.00'}%)
             </span>
-            <span className="text-slate-500 text-[10px] font-normal">Today</span>
+            <span className="text-slate-500 text-[10px] font-normal">
+              {stock.timestamp ? stock.timestamp : 'Session'}
+            </span>
           </div>
         </div>
       </div>
@@ -113,24 +147,24 @@ export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock, onBack 
         <div className="p-3 rounded bg-white dark:bg-[#090e1a] border border-slate-200 dark:border-[#182338] shadow-xs">
           <span className="text-[10px] text-slate-500 uppercase">Trading Volume</span>
           <div className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-1">
-            {(stock.volume / 1000000).toFixed(2)}M Shares
+            {stock.volume ? `${(stock.volume / 1000).toFixed(0)}k Shares` : 'N/A'}
           </div>
         </div>
         <div className="p-3 rounded bg-white dark:bg-[#090e1a] border border-slate-200 dark:border-[#182338] shadow-xs">
           <span className="text-[10px] text-slate-500 uppercase">P/E Ratio</span>
           <div className="text-xs font-bold text-slate-900 dark:text-slate-200 mt-1">
-            {stock.peRatio ? stock.peRatio.toFixed(2) : '24.50'}
+            {stock.peRatio ? stock.peRatio.toFixed(2) : '--'}
           </div>
         </div>
         <div className="p-3 rounded bg-white dark:bg-[#090e1a] border border-slate-200 dark:border-[#182338] shadow-xs">
           <span className="text-[10px] text-slate-500 uppercase">Currency</span>
           <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-            INR (₹) Standardized
+            {stock.currency || 'INR'}
           </div>
         </div>
       </div>
 
-      {/* 4. Interactive Historical Price Chart */}
+      {/* 4. Interactive Historical Price Chart (real OHLCV candles) */}
       <HistoricalPriceChart stock={stock} />
 
       {/* 5. Basic Company Information & Fundamentals */}
