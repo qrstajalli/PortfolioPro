@@ -302,15 +302,20 @@ export const LandingView: React.FC<LandingViewProps> = ({ onOpenRegister }) => {
       const matchesQuery =
         !q ||
         stock.symbol.toLowerCase().includes(q) ||
-        stock.name.toLowerCase().includes(q) ||
-        stock.sector.toLowerCase().includes(q)
+        (stock.name && stock.name.toLowerCase().includes(q)) ||
+        (stock.sector && stock.sector.toLowerCase().includes(q))
 
       if (!matchesQuery) return false
 
-      if (activeFilter === 'NSE') return stock.exchange === 'NSE'
+      if (activeFilter === 'NSE') return stock.exchange === 'NSE' || stock.exchange === 'BSE'
       if (activeFilter === 'NASDAQ') return stock.exchange === 'NASDAQ'
-      if (activeFilter === 'TECH') return stock.sector.toLowerCase().includes('tech') || stock.sector.toLowerCase().includes('semiconductor')
-      if (activeFilter === 'FINANCE') return stock.sector.toLowerCase().includes('financial')
+      if (activeFilter === 'TECH')
+        return (
+          stock.sector &&
+          (stock.sector.toLowerCase().includes('tech') || stock.sector.toLowerCase().includes('semiconductor'))
+        )
+      if (activeFilter === 'FINANCE')
+        return stock.sector && stock.sector.toLowerCase().includes('financial')
 
       return true
     })
@@ -422,7 +427,9 @@ export const LandingView: React.FC<LandingViewProps> = ({ onOpenRegister }) => {
   const formatStockPrice = (stock: StockQuote) => {
     const isUSD = stock.exchange === 'NASDAQ'
     const symbol = isUSD ? '$' : '₹'
-    const val = Number(stock.currentPrice).toLocaleString(isUSD ? 'en-US' : 'en-IN', {
+    const price = Number(stock.currentPrice) || 0
+    if (price <= 0) return 'Market data unavailable'
+    const val = price.toLocaleString(isUSD ? 'en-US' : 'en-IN', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })
@@ -432,9 +439,14 @@ export const LandingView: React.FC<LandingViewProps> = ({ onOpenRegister }) => {
   const formatStockRange = (stock: StockQuote) => {
     const isUSD = stock.exchange === 'NASDAQ'
     const symbol = isUSD ? '$' : '₹'
+    const dayLow = Number(stock.dayLow) || 0
+    const dayHigh = Number(stock.dayHigh) || 0
+    if (dayLow <= 0 && dayHigh <= 0) {
+      return { low: '--', high: '--' }
+    }
     return {
-      low: `${symbol}${Number(stock.dayLow).toFixed(0)}`,
-      high: `${symbol}${Number(stock.dayHigh).toFixed(0)}`,
+      low: `${symbol}${dayLow.toFixed(0)}`,
+      high: `${symbol}${dayHigh.toFixed(0)}`,
     }
   }
 
@@ -849,18 +861,18 @@ export const LandingView: React.FC<LandingViewProps> = ({ onOpenRegister }) => {
         {viewMode === 'cards' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
             {filteredStocks.map((stock) => {
-              const isUp = stock.changeAmount >= 0
+              const currentPrice = Number(stock.currentPrice) || 0
+              const hasValidPrice = currentPrice > 0
+              const isUp = (stock.changeAmount || 0) >= 0
               const formattedPrice = formatStockPrice(stock)
               const range = formatStockRange(stock)
-              const rangePct = Math.min(
-                100,
-                Math.max(
-                  10,
-                  ((Number(stock.currentPrice) - Number(stock.dayLow)) /
-                    (Number(stock.dayHigh) - Number(stock.dayLow) || 1)) *
-                    100
-                )
-              )
+              const dayLow = Number(stock.dayLow) || 0
+              const dayHigh = Number(stock.dayHigh) || 0
+              const rangeDiff = dayHigh - dayLow
+              const rangePct =
+                hasValidPrice && rangeDiff > 0
+                  ? Math.min(100, Math.max(10, ((currentPrice - dayLow) / rangeDiff) * 100))
+                  : 50
 
               return (
                 <div
@@ -880,16 +892,22 @@ export const LandingView: React.FC<LandingViewProps> = ({ onOpenRegister }) => {
                         </span>
                       </div>
 
-                      <span
-                        className={`text-[11px] font-bold px-1.5 py-0.5 rounded tabular-nums ${
-                          isUp
-                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
-                            : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400'
-                        }`}
-                      >
-                        {isUp ? '+' : ''}
-                        {stock.changePercent.toFixed(2)}%
-                      </span>
+                      {hasValidPrice && stock.changePercent != null ? (
+                        <span
+                          className={`text-[11px] font-bold px-1.5 py-0.5 rounded tabular-nums ${
+                            isUp
+                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
+                              : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400'
+                          }`}
+                        >
+                          {isUp ? '+' : ''}
+                          {stock.changePercent.toFixed(2)}%
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                          --
+                        </span>
+                      )}
                     </div>
 
                     <div className="text-xs text-slate-500 dark:text-slate-300 truncate mt-1 font-sans">
@@ -900,18 +918,27 @@ export const LandingView: React.FC<LandingViewProps> = ({ onOpenRegister }) => {
                   {/* Price & Sparkline */}
                   <div className="my-2 pt-2 border-t border-slate-100 dark:border-[#162033] flex items-baseline justify-between">
                     <div>
-                      <div className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums tracking-tight">
+                      <div
+                        className={`tabular-nums tracking-tight ${
+                          hasValidPrice
+                            ? 'text-lg font-extrabold text-slate-900 dark:text-white'
+                            : 'text-xs font-normal text-slate-400 dark:text-slate-500 italic'
+                        }`}
+                      >
                         {formattedPrice}
                       </div>
                       <div
                         className={`text-[10px] font-semibold tabular-nums ${
-                          isUp
+                          !hasValidPrice
+                            ? 'text-slate-400'
+                            : isUp
                             ? 'text-emerald-600 dark:text-emerald-400'
                             : 'text-rose-600 dark:text-rose-400'
                         }`}
                       >
-                        {isUp ? '+' : ''}
-                        {stock.changeAmount.toFixed(2)}
+                        {hasValidPrice && stock.changeAmount != null
+                          ? `${isUp ? '+' : ''}${stock.changeAmount.toFixed(2)}`
+                          : '--'}
                       </div>
                     </div>
 
@@ -954,7 +981,9 @@ export const LandingView: React.FC<LandingViewProps> = ({ onOpenRegister }) => {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-[#162033]">
                 {filteredStocks.map((stock) => {
-                  const isUp = stock.changeAmount >= 0
+                  const currentPrice = Number(stock.currentPrice) || 0
+                  const hasValidPrice = currentPrice > 0
+                  const isUp = (stock.changeAmount || 0) >= 0
                   const formattedPrice = formatStockPrice(stock)
                   const range = formatStockRange(stock)
 
@@ -982,21 +1011,31 @@ export const LandingView: React.FC<LandingViewProps> = ({ onOpenRegister }) => {
                         {stock.sector}
                       </td>
 
-                      <td className="py-2.5 px-4 text-right font-bold text-slate-900 dark:text-white tabular-nums">
-                        {formattedPrice}
+                      <td className="py-2.5 px-4 text-right tabular-nums">
+                        {hasValidPrice ? (
+                          <span className="font-bold text-slate-900 dark:text-white">{formattedPrice}</span>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 dark:text-slate-500 italic">
+                            Market data unavailable
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-2.5 px-4 text-right tabular-nums">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            isUp
-                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
-                              : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400'
-                          }`}
-                        >
-                          {isUp ? '+' : ''}
-                          {stock.changePercent.toFixed(2)}%
-                        </span>
+                        {hasValidPrice && stock.changePercent != null ? (
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              isUp
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
+                                : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400'
+                            }`}
+                          >
+                            {isUp ? '+' : ''}
+                            {stock.changePercent.toFixed(2)}%
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-[10px]">--</span>
+                        )}
                       </td>
 
                       <td className="py-2.5 px-4 text-center">
@@ -1006,13 +1045,18 @@ export const LandingView: React.FC<LandingViewProps> = ({ onOpenRegister }) => {
                             <span>{range.high}</span>
                           </div>
                           <div className="h-1 w-full bg-slate-100 dark:bg-[#182336] rounded-full overflow-hidden">
-                            <div className="h-full bg-slate-400 rounded-full" style={{ width: '50%' }} />
+                            <div
+                              className="h-full bg-slate-400 rounded-full"
+                              style={{ width: `${hasValidPrice ? 50 : 0}%` }}
+                            />
                           </div>
                         </div>
                       </td>
 
                       <td className="py-2.5 px-4 text-right text-slate-600 dark:text-slate-300 tabular-nums">
-                        {(stock.volume / 1000000).toFixed(2)}M
+                        {stock.volume != null && stock.volume > 0
+                          ? `${(stock.volume / 1000000).toFixed(2)}M`
+                          : '--'}
                       </td>
 
                       <td className="py-2.5 px-4 text-center">

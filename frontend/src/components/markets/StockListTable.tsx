@@ -489,11 +489,12 @@ export const StockListTable: React.FC<StockListTableProps> = ({
         <div className="p-3.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {filteredAndSortedStocks.map((stock) => {
             const mult = stock.exchange === 'NASDAQ' ? USD_TO_INR : 1
-            const currentPriceINR = Number(stock.currentPrice) * mult
-            const changeAmountINR = Number(stock.changeAmount) * mult
-            const dayLowINR = Number(stock.dayLow) * mult
-            const dayHighINR = Number(stock.dayHigh) * mult
-            const isPositive = stock.changeAmount >= 0
+            const currentPriceINR = Number(stock.currentPrice || 0) * mult
+            const changeAmountINR = Number(stock.changeAmount || 0) * mult
+            const dayLowINR = Number(stock.dayLow || 0) * mult
+            const dayHighINR = Number(stock.dayHigh || 0) * mult
+            const isPositive = (stock.changeAmount || 0) >= 0
+            const hasValidPrice = currentPriceINR > 0
 
             return (
               <div
@@ -513,12 +514,16 @@ export const StockListTable: React.FC<StockListTableProps> = ({
                     </div>
                     <span
                       className={`px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums ${
-                        isPositive
+                        !hasValidPrice
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                          : isPositive
                           ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                           : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
                       }`}
                     >
-                      {isPositive ? '+' : ''}{stock.changePercent.toFixed(2)}%
+                      {hasValidPrice && stock.changePercent != null
+                        ? `${isPositive ? '+' : ''}${stock.changePercent.toFixed(2)}%`
+                        : '--'}
                     </span>
                   </div>
 
@@ -533,11 +538,27 @@ export const StockListTable: React.FC<StockListTableProps> = ({
                 {/* Price & Sparkline */}
                 <div className="flex items-end justify-between pt-2 border-t border-slate-100 dark:border-[#162033]">
                   <div>
-                    <div className="text-base font-bold text-slate-900 dark:text-white tabular-nums">
-                      {formatINR(currentPriceINR)}
+                    <div
+                      className={`tabular-nums ${
+                        hasValidPrice
+                          ? 'text-base font-bold text-slate-900 dark:text-white'
+                          : 'text-xs font-normal text-slate-400 dark:text-slate-500 italic'
+                      }`}
+                    >
+                      {hasValidPrice ? formatINR(currentPriceINR) : 'Market data unavailable'}
                     </div>
-                    <div className={`text-[10px] tabular-nums ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                      {isPositive ? '+' : ''}{formatINR(changeAmountINR)}
+                    <div
+                      className={`text-[10px] tabular-nums ${
+                        !hasValidPrice
+                          ? 'text-slate-400'
+                          : isPositive
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-rose-600 dark:text-rose-400'
+                      }`}
+                    >
+                      {hasValidPrice && stock.changeAmount != null
+                        ? `${isPositive ? '+' : ''}${formatINR(changeAmountINR)}`
+                        : '--'}
                     </div>
                   </div>
                   <div>{renderSparkline(stock.symbol, isPositive)}</div>
@@ -545,9 +566,9 @@ export const StockListTable: React.FC<StockListTableProps> = ({
 
                 {/* Low / High Footer */}
                 <div className="pt-2 border-t border-slate-100 dark:border-[#162033] flex justify-between text-[9px] text-slate-500 dark:text-slate-400 tabular-nums">
-                  <span>L: ₹{dayLowINR.toFixed(0)}</span>
-                  <span>H: ₹{dayHighINR.toFixed(0)}</span>
-                  <span>Vol: {(stock.volume / 1000000).toFixed(1)}M</span>
+                  <span>L: {hasValidPrice && dayLowINR > 0 ? `₹${dayLowINR.toFixed(0)}` : '--'}</span>
+                  <span>H: {hasValidPrice && dayHighINR > 0 ? `₹${dayHighINR.toFixed(0)}` : '--'}</span>
+                  <span>Vol: {stock.volume != null && stock.volume > 0 ? `${(stock.volume / 1000000).toFixed(1)}M` : '--'}</span>
                 </div>
               </div>
             )

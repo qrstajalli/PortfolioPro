@@ -121,14 +121,15 @@ export const WatchlistSection: React.FC<WatchlistSectionProps> = ({
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-[#172033]">
             {filteredStocks.map((stock) => {
-              const isPositive = stock.changeAmount >= 0
+              const isPositive = (stock.changeAmount || 0) >= 0
               const isStarred = starredSymbols.has(stock.symbol)
               const isSelected = selectedStock?.symbol === stock.symbol
               const mult = stock.exchange === 'NASDAQ' ? USD_TO_INR : 1
-              const currentPriceINR = Number(stock.currentPrice) * mult
-              const changeAmountINR = Number(stock.changeAmount) * mult
-              const dayLowINR = Number(stock.dayLow) * mult
-              const dayHighINR = Number(stock.dayHigh) * mult
+              const currentPriceINR = Number(stock.currentPrice || 0) * mult
+              const changeAmountINR = Number(stock.changeAmount || 0) * mult
+              const dayLowINR = Number(stock.dayLow || 0) * mult
+              const dayHighINR = Number(stock.dayHigh || 0) * mult
+              const hasValidPrice = currentPriceINR > 0
 
               return (
                 <tr
@@ -173,31 +174,46 @@ export const WatchlistSection: React.FC<WatchlistSectionProps> = ({
 
                   {/* LTP */}
                   <td className="py-2 px-3 text-right font-bold text-slate-900 dark:text-white tabular-nums">
-                    {formatCurrency(currentPriceINR)}
+                    {hasValidPrice ? (
+                      formatCurrency(currentPriceINR)
+                    ) : (
+                      <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500 italic">
+                        Market data unavailable
+                      </span>
+                    )}
                   </td>
 
                   {/* Change pts */}
                   <td
                     className={`py-2 px-3 text-right tabular-nums font-semibold ${
-                      isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                      !hasValidPrice
+                        ? 'text-slate-400'
+                        : isPositive
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-rose-600 dark:text-rose-400'
                     }`}
                   >
-                    {isPositive ? '+' : ''}
-                    {changeAmountINR.toFixed(2)}
+                    {hasValidPrice && stock.changeAmount != null
+                      ? `${isPositive ? '+' : ''}${changeAmountINR.toFixed(2)}`
+                      : '--'}
                   </td>
 
                   {/* Change % */}
                   <td className="py-2 px-3 text-right tabular-nums">
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                        isPositive
-                          ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20'
-                          : 'bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
-                      }`}
-                    >
-                      {isPositive ? '+' : ''}
-                      {stock.changePercent.toFixed(2)}%
-                    </span>
+                    {hasValidPrice && stock.changePercent != null ? (
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                          isPositive
+                            ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20'
+                            : 'bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
+                        }`}
+                      >
+                        {isPositive ? '+' : ''}
+                        {stock.changePercent.toFixed(2)}%
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-[10px]">--</span>
+                    )}
                   </td>
 
                   {/* Day range bar */}
@@ -207,28 +223,34 @@ export const WatchlistSection: React.FC<WatchlistSectionProps> = ({
                         <div
                           className="h-full bg-slate-400 rounded-full"
                           style={{
-                            width: `${Math.min(
-                              100,
-                              Math.max(
-                                10,
-                                ((currentPriceINR - dayLowINR) /
-                                  (dayHighINR - dayLowINR || 1)) *
-                                  100
-                              )
-                            )}%`,
+                            width: `${
+                              hasValidPrice && dayHighINR > dayLowINR
+                                ? Math.min(
+                                    100,
+                                    Math.max(
+                                      10,
+                                      ((currentPriceINR - dayLowINR) /
+                                        (dayHighINR - dayLowINR || 1)) *
+                                        100
+                                    )
+                                  )
+                                : 50
+                            }%`,
                           }}
                         />
                       </div>
                       <div className="flex justify-between text-[8px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                        <span>₹{dayLowINR.toFixed(0)}</span>
-                        <span>₹{dayHighINR.toFixed(0)}</span>
+                        <span>{hasValidPrice && dayLowINR > 0 ? `₹${dayLowINR.toFixed(0)}` : '--'}</span>
+                        <span>{hasValidPrice && dayHighINR > 0 ? `₹${dayHighINR.toFixed(0)}` : '--'}</span>
                       </div>
                     </div>
                   </td>
 
                   {/* Volume */}
                   <td className="py-2 px-3 text-right text-slate-500 dark:text-slate-400 text-[11px] tabular-nums">
-                    {(stock.volume / 1000000).toFixed(2)}M
+                    {stock.volume != null && stock.volume > 0
+                      ? `${(stock.volume / 1000000).toFixed(2)}M`
+                      : '--'}
                   </td>
 
                   {/* P/E Ratio */}

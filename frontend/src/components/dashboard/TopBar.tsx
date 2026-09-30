@@ -201,7 +201,7 @@ export const TopBar: React.FC<TopBarProps> = ({ stocks, onSelectStock, onOpenSet
                             }`}
                           >
                             {isGain ? '+' : ''}
-                            {stock.changePercent.toFixed(2)}%
+                            {(stock.changePercent != null ? stock.changePercent : 0).toFixed(2)}%
                           </div>
                         </>
                       ) : (

@@ -23,10 +23,11 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ stock }) => {
 
   const USD_TO_INR = 84
   const multiplier = stock.exchange === 'NASDAQ' ? USD_TO_INR : 1
-  const currentPriceINR = Number(stock.currentPrice) * multiplier
-  const dayLowINR = Number(stock.dayLow) * multiplier
-  const dayHighINR = Number(stock.dayHigh) * multiplier
-  const prevCloseINR = Number(stock.previousClose) * multiplier
+  const currentPriceINR = Number(stock.currentPrice || 0) * multiplier
+  const dayLowINR = Number(stock.dayLow || 0) * multiplier
+  const dayHighINR = Number(stock.dayHigh || 0) * multiplier
+  const prevCloseINR = Number(stock.previousClose || 0) * multiplier
+  const hasValidPrice = currentPriceINR > 0
 
   const formatINR = (val: number) => {
     return `₹${Number(val).toLocaleString('en-IN', {
@@ -50,15 +51,13 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ stock }) => {
   // 52-Week High & Low in INR
   const fiftyTwoHigh = profile.fiftyTwoWeekHigh
   const fiftyTwoLow = profile.fiftyTwoWeekLow
-  const fiftyTwoPct = Math.min(
-    100,
-    Math.max(0, ((currentPriceINR - fiftyTwoLow) / (fiftyTwoHigh - fiftyTwoLow || 1)) * 100)
-  )
+  const fiftyTwoPct = hasValidPrice
+    ? Math.min(100, Math.max(0, ((currentPriceINR - fiftyTwoLow) / (fiftyTwoHigh - fiftyTwoLow || 1)) * 100))
+    : 50
 
-  const dayRangePct = Math.min(
-    100,
-    Math.max(0, ((currentPriceINR - dayLowINR) / (dayHighINR - dayLowINR || 1)) * 100)
-  )
+  const dayRangePct = hasValidPrice && dayHighINR > dayLowINR
+    ? Math.min(100, Math.max(0, ((currentPriceINR - dayLowINR) / (dayHighINR - dayLowINR || 1)) * 100))
+    : 50
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 font-mono select-none">
@@ -161,9 +160,11 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ stock }) => {
               />
             </div>
             <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
-              <span>{formatINR(dayLowINR)}</span>
-              <span className="text-slate-900 dark:text-white font-bold">{formatINR(currentPriceINR)}</span>
-              <span>{formatINR(dayHighINR)}</span>
+              <span>{dayLowINR > 0 ? formatINR(dayLowINR) : '--'}</span>
+              <span className="text-slate-900 dark:text-white font-bold">
+                {hasValidPrice ? formatINR(currentPriceINR) : 'Market data unavailable'}
+              </span>
+              <span>{dayHighINR > 0 ? formatINR(dayHighINR) : '--'}</span>
             </div>
           </div>
 
@@ -180,9 +181,11 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ stock }) => {
               />
             </div>
             <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
-              <span>{formatINR(fiftyTwoLow)}</span>
-              <span className="text-slate-900 dark:text-white font-bold">{formatINR(currentPriceINR)}</span>
-              <span>{formatINR(fiftyTwoHigh)}</span>
+              <span>{fiftyTwoLow > 0 ? formatINR(fiftyTwoLow) : '--'}</span>
+              <span className="text-slate-900 dark:text-white font-bold">
+                {hasValidPrice ? formatINR(currentPriceINR) : 'Market data unavailable'}
+              </span>
+              <span>{fiftyTwoHigh > 0 ? formatINR(fiftyTwoHigh) : '--'}</span>
             </div>
           </div>
         </div>
@@ -222,13 +225,15 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ stock }) => {
             <div className="py-2.5 flex items-center justify-between">
               <span className="text-slate-500 dark:text-slate-400">24h Trading Volume</span>
               <span className="font-bold text-slate-800 dark:text-slate-200 tabular-nums">
-                {(stock.volume / 1000000).toFixed(2)}M Shares
+                {stock.volume != null && stock.volume > 0 ? `${(stock.volume / 1000000).toFixed(2)}M Shares` : '--'}
               </span>
             </div>
 
             <div className="py-2.5 flex items-center justify-between">
               <span className="text-slate-500 dark:text-slate-400">Previous Close</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300 tabular-nums">{formatINR(prevCloseINR)}</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300 tabular-nums">
+                {prevCloseINR > 0 ? formatINR(prevCloseINR) : '--'}
+              </span>
             </div>
 
             <div className="py-2.5 flex items-center justify-between">

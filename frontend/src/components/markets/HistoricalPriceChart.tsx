@@ -221,9 +221,11 @@ export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stoc
         {/* Left: Current Price & Period Change Info */}
         <div className="flex items-baseline gap-3">
           <span className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tabular-nums tracking-tight">
-            {formatINR(activeDisplayNode ? activeDisplayNode.price : currentPriceINR)}
+            {(activeDisplayNode ? activeDisplayNode.price : currentPriceINR) > 0
+              ? formatINR(activeDisplayNode ? activeDisplayNode.price : currentPriceINR)
+              : 'Market data unavailable'}
           </span>
-          {nodes.length > 0 && (
+          {nodes.length > 0 && startPrice > 0 && (
             <div
               className={`text-xs font-bold tabular-nums flex items-center gap-1 ${
                 isPeriodGain ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'

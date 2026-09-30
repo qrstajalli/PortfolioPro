@@ -63,6 +63,8 @@ export const AppContent: React.FC = () => {
           />
           <Route path="/markets" element={<MarketsModule />} />
           <Route path="/markets/:symbol" element={<MarketsModule />} />
+          <Route path="/stocks" element={<MarketsModule />} />
+          <Route path="/stocks/:symbol" element={<MarketsModule />} />
           <Route
             path="/login"
             element={
