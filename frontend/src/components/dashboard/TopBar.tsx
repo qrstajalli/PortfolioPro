@@ -263,14 +263,25 @@ export const TopBar: React.FC<TopBarProps> = ({ stocks, onSelectStock, onOpenSet
           )}
         </button>
 
-        {/* Wallet Quick Chip */}
-        <div className="flex items-center gap-2 px-3 py-1 rounded bg-emerald-50 dark:bg-[#0b1322] border border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-mono">
-          <WalletIcon className="h-3.5 w-3.5" />
-          <span className="font-semibold tabular-nums">₹{formattedBalance}</span>
+        {/* Top Navigation Capital Button */}
+        <div className="flex items-center gap-1.5 p-0.5 pl-2.5 pr-1 rounded bg-emerald-50 dark:bg-[#0b1322] border border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-mono">
           <button
+            type="button"
+            onClick={onOpenSetupCapital}
+            className="flex items-center gap-1.5 font-semibold hover:text-emerald-900 dark:hover:text-emerald-200 transition-colors cursor-pointer group"
+            title="Adjust Virtual Trading Capital"
+          >
+            <WalletIcon className="h-3.5 w-3.5" />
+            <span className="tabular-nums">₹{formattedBalance}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30 font-medium group-hover:bg-emerald-200 dark:group-hover:bg-emerald-500/30 transition-colors">
+              Adjust Capital
+            </span>
+          </button>
+          <button
+            type="button"
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="text-emerald-600 hover:text-emerald-800 dark:text-slate-400 dark:hover:text-emerald-300 ml-0.5 cursor-pointer"
+            className="p-1 text-emerald-600 hover:text-emerald-800 dark:text-slate-400 dark:hover:text-emerald-300 cursor-pointer rounded hover:bg-emerald-100 dark:hover:bg-emerald-500/10 transition-colors"
             title="Refresh cash balance"
           >
             <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin text-emerald-500' : ''}`} />

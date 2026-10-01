@@ -21,26 +21,26 @@ export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock: initial
   const [stock, setStock] = useState<StockQuote>(initialStock)
   const [isTerminalOpen, setIsTerminalOpen] = useState(false)
 
-  // Fetch latest quote on detail page mount only if price is missing
+  // Always sync local stock state when initialStock prop changes (e.g. from search selection)
   useEffect(() => {
+    setStock(initialStock)
     let isMounted = true
-    if (!initialStock.currentPrice || Number(initialStock.currentPrice) <= 0) {
-      marketService
-        .getQuote(initialStock.symbol)
-        .then((fresh) => {
-          if (isMounted && fresh) {
-            setStock(fresh)
-          }
-        })
-        .catch((err) => {
-          console.warn('Could not refresh live quote for detail page:', err.message)
-        })
-    }
+
+    marketService
+      .getQuote(initialStock.symbol)
+      .then((fresh) => {
+        if (isMounted && fresh && fresh.currentPrice) {
+          setStock(fresh)
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not refresh live quote for detail page:', err.message)
+      })
 
     return () => {
       isMounted = false
     }
-  }, [initialStock.symbol, initialStock.currentPrice])
+  }, [initialStock.symbol])
 
   const isUSD = stock.currency === 'USD' || stock.exchange === 'NASDAQ'
   const currentPrice = Number(stock.currentPrice || stock.price || 0)

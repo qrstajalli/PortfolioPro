@@ -82,9 +82,6 @@ export const Dashboard: React.FC = () => {
       .then((res) => {
         if (res.data?.data) {
           setStocks(res.data.data)
-          if (res.data.data.length > 0 && !selectedStock) {
-            setSelectedStock(res.data.data[0])
-          }
         }
       })
       .catch((err) => console.error('Failed to load market stocks in dashboard:', err))
@@ -137,9 +134,7 @@ export const Dashboard: React.FC = () => {
           stocks={stocks}
           onSelectStock={(stock) => {
             setSelectedStock(stock)
-            if (activeTab !== 'dashboard' && activeTab !== 'watchlist' && activeTab !== 'markets') {
-              setActiveTab('markets')
-            }
+            setActiveTab('markets')
           }}
           onOpenSetupCapital={() => setIsSetupModalOpen(true)}
         />
@@ -197,7 +192,9 @@ export const Dashboard: React.FC = () => {
             <div className="space-y-4 animate-fade-in">
               <MarketsModule
                 initialSymbol={selectedStock?.symbol}
+                selectedStock={selectedStock}
                 onStockSelect={(stock) => setSelectedStock(stock)}
+                onClearStock={() => setSelectedStock(null)}
               />
             </div>
           )}
@@ -260,6 +257,10 @@ export const Dashboard: React.FC = () => {
         isOpen={isSetupModalOpen}
         onClose={() => {
           setIsSetupModalOpen(false)
+          refreshWallet()
+          loadUserData()
+        }}
+        onSuccess={() => {
           refreshWallet()
           loadUserData()
         }}

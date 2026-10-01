@@ -14,12 +14,14 @@ interface PortfolioSetupModalProps {
   isOpen: boolean
   onClose?: () => void
   isInitialOnboarding?: boolean
+  onSuccess?: () => void
 }
 
 export const PortfolioSetupModal: React.FC<PortfolioSetupModalProps> = ({
   isOpen,
   onClose,
   isInitialOnboarding = false,
+  onSuccess,
 }) => {
   const { wallet, setupCapital } = useAuth()
 
@@ -46,6 +48,25 @@ export const PortfolioSetupModal: React.FC<PortfolioSetupModalProps> = ({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+
+  // Sync state with current wallet whenever the modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      const bal = wallet?.balance ? Number(wallet.balance) : 500000
+      const isPreset = CAPITAL_PRESETS.some((p) => p.value === bal)
+      if (isPreset) {
+        setSelectedPreset(bal)
+        setIsCustom(false)
+        setCustomAmount('')
+      } else if (bal > 0) {
+        setSelectedPreset(null)
+        setIsCustom(true)
+        setCustomAmount(String(bal))
+      }
+      setError(null)
+      setSuccess(false)
+    }
+  }, [isOpen, wallet?.balance])
 
   if (!isOpen) return null
 
@@ -82,6 +103,7 @@ export const PortfolioSetupModal: React.FC<PortfolioSetupModalProps> = ({
     try {
       await setupCapital(activeAmount)
       setSuccess(true)
+      onSuccess?.()
       setTimeout(() => {
         setSuccess(false)
         if (onClose) onClose()

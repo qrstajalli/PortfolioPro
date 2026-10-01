@@ -10,12 +10,16 @@ import TradingTerminal from './TradingTerminal'
 
 interface MarketsModuleProps {
   initialSymbol?: string
+  selectedStock?: StockQuote | null
   onStockSelect?: (stock: StockQuote) => void
+  onClearStock?: () => void
 }
 
 export const MarketsModule: React.FC<MarketsModuleProps> = ({
   initialSymbol,
+  selectedStock: propSelectedStock,
   onStockSelect,
+  onClearStock,
 }) => {
   const params = useParams<{ symbol?: string }>()
   const navigate = useNavigate()
@@ -23,7 +27,7 @@ export const MarketsModule: React.FC<MarketsModuleProps> = ({
   const [stocks, setStocks] = useState<StockQuote[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedStock, setSelectedStock] = useState<StockQuote | null>(null)
+  const [selectedStock, setSelectedStock] = useState<StockQuote | null>(propSelectedStock || null)
   const [selectedIndexFilter, setSelectedIndexFilter] = useState<string | null>(null)
   const [isTerminalOpen, setIsTerminalOpen] = useState(false)
 
@@ -35,18 +39,23 @@ export const MarketsModule: React.FC<MarketsModuleProps> = ({
       const data = await marketService.getStocks()
       setStocks(data)
 
-      // If target symbol passed via URL param or prop
-      const targetSymbol = (params.symbol || initialSymbol)?.toUpperCase()
-      if (targetSymbol) {
-        const match = data.find((s) => s.symbol.toUpperCase() === targetSymbol)
-        if (match) {
-          setSelectedStock(match)
-        } else {
-          // Fetch directly from quote endpoint
-          marketService
-            .getQuote(targetSymbol)
-            .then((q) => setSelectedStock(q))
-            .catch(() => {})
+      // If target symbol passed via prop or URL param
+      if (propSelectedStock) {
+        setSelectedStock(propSelectedStock)
+      } else {
+        const targetSymbol = (params.symbol || initialSymbol)?.toUpperCase()
+        if (targetSymbol) {
+          const match = data.find((s) => s.symbol.toUpperCase() === targetSymbol)
+          if (match) {
+            setSelectedStock(match)
+          } else {
+            marketService
+              .getQuote(targetSymbol)
+              .then((q) => {
+                if (q && q.symbol) setSelectedStock(q)
+              })
+              .catch(() => {})
+          }
         }
       }
     } catch (err: any) {
@@ -63,8 +72,12 @@ export const MarketsModule: React.FC<MarketsModuleProps> = ({
     fetchMarketStocks()
   }, [])
 
-  // Sync if params.symbol or initialSymbol changes
+  // Sync if propSelectedStock, params.symbol or initialSymbol changes
   useEffect(() => {
+    if (propSelectedStock) {
+      setSelectedStock(propSelectedStock)
+      return
+    }
     const target = (params.symbol || initialSymbol)?.toUpperCase()
     if (target) {
       const match = stocks.find((s) => s.symbol.toUpperCase() === target)
@@ -73,11 +86,15 @@ export const MarketsModule: React.FC<MarketsModuleProps> = ({
       } else {
         marketService
           .getQuote(target)
-          .then((q) => setSelectedStock(q))
+          .then((q) => {
+            if (q && q.symbol) setSelectedStock(q)
+          })
           .catch(() => {})
       }
+    } else {
+      setSelectedStock(null)
     }
-  }, [params.symbol, initialSymbol, stocks])
+  }, [propSelectedStock, params.symbol, initialSymbol, stocks])
 
   const handleSelectStock = (stock: StockQuote) => {
     setSelectedStock(stock)
@@ -86,27 +103,17 @@ export const MarketsModule: React.FC<MarketsModuleProps> = ({
 
   const handleBackToList = () => {
     setSelectedStock(null)
+    onClearStock?.()
     if (params.symbol) {
       navigate('/markets')
     }
   }
 
   if (isTerminalOpen) {
-    const terminalStock = selectedStock || stocks[0] || {
-      symbol: 'AAPL',
-      name: 'Apple Inc.',
-      company: 'Apple Inc.',
-      exchange: 'NASDAQ',
-      market: 'NASDAQ',
-      sector: 'Technology',
-      currency: 'USD',
-      currentPrice: 220,
-      previousClose: 218,
-      changeAmount: 2,
-      changePercent: 0.92,
-      volume: 45000000,
+    const terminalStock = selectedStock || stocks[0]
+    if (terminalStock) {
+      return <TradingTerminal stock={terminalStock} onBack={() => setIsTerminalOpen(false)} />
     }
-    return <TradingTerminal stock={terminalStock} onBack={() => setIsTerminalOpen(false)} />
   }
 
   return (

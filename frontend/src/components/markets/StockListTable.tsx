@@ -485,7 +485,12 @@ export const StockListTable: React.FC<StockListTableProps> = ({
 
       {/* 3. Content: CARDS VIEW */}
       {viewMode === 'cards' && (
-        <div className="p-3.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        filteredAndSortedStocks.length === 0 ? (
+          <div className="p-8 text-center text-slate-400 font-mono text-xs">
+            No matching securities found for "{search}"
+          </div>
+        ) : (
+          <div className="p-3.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {filteredAndSortedStocks.map((stock) => {
             const currentPrice = Number(stock.currentPrice || 0)
             const changeAmount = Number(stock.changeAmount || 0)
@@ -571,7 +576,8 @@ export const StockListTable: React.FC<StockListTableProps> = ({
               </div>
             )
           })}
-        </div>
+          </div>
+        )
       )}
     </div>
   )
