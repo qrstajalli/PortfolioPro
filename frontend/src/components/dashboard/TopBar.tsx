@@ -128,7 +128,7 @@ export const TopBar: React.FC<TopBarProps> = ({ stocks, onSelectStock, onOpenSet
     : '0.00'
 
   return (
-    <header className="h-13 border-b border-slate-200 dark:border-[#1c2638] bg-white/95 dark:bg-[#080c14]/95 backdrop-blur-md px-4 flex items-center justify-between gap-4 sticky top-0 z-30 select-none transition-colors">
+    <header className="h-13 shrink-0 border-b border-slate-200 dark:border-[#1c2638] bg-white/95 dark:bg-[#080c14]/95 backdrop-blur-md px-4 flex items-center justify-between gap-4 sticky top-0 z-30 select-none transition-colors">
       {/* 1. Global Stock Search & Command Bar */}
       <div ref={searchContainerRef} className="relative flex-1 max-w-md">
         <div className="relative">

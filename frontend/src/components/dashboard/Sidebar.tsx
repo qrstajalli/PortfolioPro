@@ -42,7 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`h-screen sticky top-0 flex flex-col justify-between border-r border-slate-200 dark:border-[#1c2638] bg-white dark:bg-[#090d16] z-40 transition-all duration-200 select-none ${
+      className={`h-screen shrink-0 sticky top-0 flex flex-col justify-between border-r border-slate-200 dark:border-[#1c2638] bg-white dark:bg-[#090d16] z-40 transition-all duration-200 select-none ${
         isCollapsed ? 'w-16' : 'w-56'
       }`}
     >
@@ -116,26 +116,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* Bottom Area: Engine status & User profile */}
-      <div className="p-2 border-t border-slate-200 dark:border-[#1c2638] space-y-2">
-        {/* Sim Engine Status */}
-        <div
-          className={`flex items-center gap-2 p-2 rounded bg-slate-50 dark:bg-[#060a12] border border-slate-200 dark:border-[#141d2f] text-[10px] font-mono text-slate-600 dark:text-slate-400 ${
-            isCollapsed ? 'justify-center' : ''
-          }`}
-        >
-          <span className="relative flex h-2 w-2 shrink-0">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-          </span>
-          {!isCollapsed && (
-            <div className="truncate">
-              <span className="text-slate-800 dark:text-slate-300 font-semibold">ENGINE ACTIVE</span>
-              <span className="text-slate-500 block text-[9px]">US MARKET DATA</span>
-            </div>
-          )}
-        </div>
-
+      {/* Bottom Area: User profile & Logout */}
+      <div className="p-2 border-t border-slate-200 dark:border-[#1c2638]">
         {/* User Pill & Logout */}
         <div
           className={`flex items-center justify-between p-1.5 rounded bg-slate-100 dark:bg-[#0d1322] border border-slate-200 dark:border-[#1a253a] ${

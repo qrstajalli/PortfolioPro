@@ -121,8 +121,8 @@ export const Dashboard: React.FC = () => {
   const userCurrency = portfolio?.currency || wallet?.currency || 'INR'
 
   return (
-    <div className="flex min-h-screen bg-slate-50 dark:bg-[#080c14] text-slate-900 dark:text-slate-100 font-sans antialiased overflow-x-hidden transition-colors">
-      {/* 1. Left Sidebar */}
+    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-[#080c14] text-slate-900 dark:text-slate-100 font-sans antialiased transition-colors">
+      {/* 1. Left Sidebar (Fixed / Full Height) */}
       <Sidebar
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -130,8 +130,8 @@ export const Dashboard: React.FC = () => {
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
 
-      {/* 2. Main Terminal Canvas */}
-      <div className="flex-1 flex flex-col min-w-0 bg-slate-50 dark:bg-[#080c14] transition-colors">
+      {/* 2. Main Terminal Canvas (Fixed Height, Main Content Scrolls) */}
+      <div className="flex-1 flex flex-col h-screen min-w-0 bg-slate-50 dark:bg-[#080c14] overflow-hidden transition-colors">
         {/* Top Bar: Stock Search, Market Status, User/Account */}
         <TopBar
           stocks={stocks}
@@ -144,7 +144,7 @@ export const Dashboard: React.FC = () => {
           onOpenSetupCapital={() => setIsSetupModalOpen(true)}
         />
 
-        {/* Workstation Content Area */}
+        {/* Workstation Content Area (Scrolls independently) */}
         <main className="flex-1 p-3.5 sm:p-4 space-y-4 max-w-[1600px] w-full mx-auto overflow-y-auto">
           {/* TAB: DASHBOARD (Default high-density overview) */}
           {activeTab === 'dashboard' && (
@@ -161,7 +161,7 @@ export const Dashboard: React.FC = () => {
                 onOpenSetupCapital={() => setIsSetupModalOpen(true)}
               />
 
-              {/* Grid: Real Performance Chart (8 cols) + Data-Driven Holdings & Watchlist Widgets (4 cols) */}
+              {/* Grid: Real Performance Chart (8 cols) + Top Market Watchlist & Holdings Widgets (4 cols) */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
                 <div className="lg:col-span-8">
                   <PerformanceChart
@@ -182,15 +182,6 @@ export const Dashboard: React.FC = () => {
                   />
                 </div>
               </div>
-
-              {/* Market Watchlist Section */}
-              <WatchlistSection
-                watchlistItems={watchlistItems}
-                selectedStock={selectedStock}
-                onSelectSymbol={handleSelectSymbol}
-                onRefreshWatchlist={loadUserData}
-                currency={userCurrency}
-              />
 
               {/* Recent Transactions Section */}
               <RecentTransactions
