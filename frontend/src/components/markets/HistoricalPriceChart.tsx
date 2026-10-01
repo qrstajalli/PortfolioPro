@@ -27,6 +27,7 @@ export type ChartTimeframe = '1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | '5Y' | 'A
 interface HistoricalPriceChartProps {
   stock: StockQuote
   onTimeframeChange?: (tf: ChartTimeframe) => void
+  onOpenFullChart?: () => void
 }
 
 interface HoveredCandleData {
@@ -41,7 +42,7 @@ interface HoveredCandleData {
   isGain: boolean
 }
 
-export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stock }) => {
+export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stock, onOpenFullChart }) => {
   const [timeframe, setTimeframe] = useState<ChartTimeframe>('1M')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -403,8 +404,19 @@ export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stoc
           </span>
         </div>
 
-        {/* Right: Chart Controls & Fit Button */}
+        {/* Right: Chart Controls, Full Chart & Fit Button */}
         <div className="flex items-center gap-2">
+          {onOpenFullChart && (
+            <button
+              onClick={onOpenFullChart}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs cursor-pointer transition-colors"
+              title="Open Dedicated Full-Screen Trading Terminal"
+            >
+              <Maximize2 className="h-3 w-3" />
+              <span>Full Chart</span>
+            </button>
+          )}
+
           <button
             onClick={handleResetZoom}
             className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded bg-white dark:bg-[#141d30] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#1e2c45] shadow-xs cursor-pointer transition-colors"

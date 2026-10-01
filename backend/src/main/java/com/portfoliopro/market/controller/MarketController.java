@@ -27,9 +27,14 @@ public class MarketController {
         return ResponseEntity.ok(ApiResponse.ok("Market quotes retrieved successfully", quotes));
     }
 
-    @GetMapping(value = {"/quote/{symbol}", "/stocks/{symbol}"})
+    @GetMapping(value = {"/quote/{symbol}", "/stocks/{symbol}", "/quote"})
     public ResponseEntity<ApiResponse<StockQuoteDto>> getStockQuote(
-            @PathVariable("symbol") String symbol) {
+            @PathVariable(value = "symbol", required = false) String pathSymbol,
+            @RequestParam(value = "symbol", required = false) String querySymbol) {
+        String symbol = (pathSymbol != null && !pathSymbol.isBlank()) ? pathSymbol : querySymbol;
+        if (symbol == null || symbol.isBlank()) {
+            throw new ResourceNotFoundException("Stock quote", "symbol", "empty");
+        }
         StockQuoteDto quote = marketDataProvider.getQuote(symbol)
                 .orElseThrow(() -> new ResourceNotFoundException("Stock quote", "symbol", symbol));
         return ResponseEntity.ok(ApiResponse.ok("Stock quote retrieved successfully", quote));
@@ -47,10 +52,15 @@ public class MarketController {
         return ResponseEntity.ok(ApiResponse.ok("Search results retrieved successfully", results));
     }
 
-    @GetMapping("/history/{symbol}")
+    @GetMapping(value = {"/history/{symbol}", "/history"})
     public ResponseEntity<ApiResponse<StockHistoryDto>> getStockHistory(
-            @PathVariable("symbol") String symbol,
+            @PathVariable(value = "symbol", required = false) String pathSymbol,
+            @RequestParam(value = "symbol", required = false) String querySymbol,
             @RequestParam(value = "range", required = false) String range) {
+        String symbol = (pathSymbol != null && !pathSymbol.isBlank()) ? pathSymbol : querySymbol;
+        if (symbol == null || symbol.isBlank()) {
+            throw new ResourceNotFoundException("Stock history", "symbol", "empty");
+        }
         StockHistoryDto history = (range != null && !range.isBlank())
                 ? marketDataProvider.getHistoricalPrices(symbol, range).orElseThrow(() -> new ResourceNotFoundException("Stock history", "symbol", symbol))
                 : marketDataProvider.getHistoricalPrices(symbol).orElseThrow(() -> new ResourceNotFoundException("Stock history", "symbol", symbol));

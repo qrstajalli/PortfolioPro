@@ -540,10 +540,12 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
         }
         return switch (range.trim().toUpperCase()) {
             case "1D" -> new TimeframeConfig("5min", 78);
+            case "5D" -> new TimeframeConfig("15min", 130);
             case "1W" -> new TimeframeConfig("30min", 65);
             case "1M" -> new TimeframeConfig("1day", 30);
             case "3M" -> new TimeframeConfig("1day", 90);
             case "6M" -> new TimeframeConfig("1day", 180);
+            case "YTD" -> new TimeframeConfig("1day", 260);
             case "1Y" -> new TimeframeConfig("1day", 365);
             case "5Y" -> new TimeframeConfig("1day", 1300);
             case "ALL" -> new TimeframeConfig("1day", 1500);

@@ -8,9 +8,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import com.portfoliopro.trade.dto.TradeOrderRequest;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -33,5 +33,13 @@ public class TradeController {
             @AuthenticationPrincipal UserDetails userDetails) {
         List<TransactionDto> transactions = tradeService.getTransactionsByUserEmail(userDetails.getUsername());
         return ResponseEntity.ok(ApiResponse.ok("Transactions retrieved successfully", transactions));
+    }
+
+    @PostMapping("/order")
+    public ResponseEntity<ApiResponse<OrderDto>> executeOrder(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody TradeOrderRequest request) {
+        OrderDto order = tradeService.executeOrder(userDetails.getUsername(), request);
+        return ResponseEntity.ok(ApiResponse.ok("Trade order executed successfully", order));
     }
 }

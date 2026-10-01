@@ -11,6 +11,17 @@ export const tradeService = {
     const response = await api.get<ApiResponse<Transaction[]>>('/trade/transactions')
     return response.data.data
   },
+
+  async executeOrder(order: {
+    symbol: string
+    side: 'BUY' | 'SELL'
+    quantity: number
+    orderType?: string
+    limitPrice?: number
+  }): Promise<Order> {
+    const response = await api.post<ApiResponse<Order>>('/trade/order', order)
+    return response.data.data
+  },
 }
 
 export default tradeService

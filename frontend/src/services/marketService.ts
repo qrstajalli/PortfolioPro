@@ -40,7 +40,9 @@ export const marketService = {
    * Get a specific stock quote by symbol
    */
   async getQuote(symbol: string): Promise<StockQuote> {
-    const res = await api.get<ApiResponse<StockQuote>>(`/market/quote/${encodeURIComponent(symbol)}`)
+    const res = await api.get<ApiResponse<StockQuote>>('/market/quote', {
+      params: { symbol: symbol.trim() },
+    })
     return normalizeQuote(res.data.data)
   },
 
@@ -62,8 +64,11 @@ export const marketService = {
    * Get historical OHLCV daily/intraday data points for a symbol with optional timeframe range
    */
   async getHistory(symbol: string, range?: string): Promise<StockHistory> {
-    const params = range ? { range } : {}
-    const res = await api.get<ApiResponse<StockHistory>>(`/market/history/${encodeURIComponent(symbol)}`, { params })
+    const params: Record<string, string> = { symbol: symbol.trim() }
+    if (range) {
+      params.range = range
+    }
+    const res = await api.get<ApiResponse<StockHistory>>('/market/history', { params })
     return res.data.data
   },
 }

@@ -3,12 +3,14 @@ import {
   ArrowLeft,
   TrendingUp,
   TrendingDown,
-  Clock
+  Clock,
+  Maximize2
 } from 'lucide-react'
 import type { StockQuote } from '../../types/auth'
 import marketService from '../../services/marketService'
 import HistoricalPriceChart from './HistoricalPriceChart'
 import CompanyProfile from './CompanyProfile'
+import TradingTerminal from './TradingTerminal'
 
 interface StockDetailPageProps {
   stock: StockQuote
@@ -17,6 +19,7 @@ interface StockDetailPageProps {
 
 export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock: initialStock, onBack }) => {
   const [stock, setStock] = useState<StockQuote>(initialStock)
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false)
 
   // Fetch latest quote on detail page mount only if price is missing
   useEffect(() => {
@@ -55,6 +58,10 @@ export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock: initial
     })}`
   }
 
+  if (isTerminalOpen) {
+    return <TradingTerminal stock={stock} onBack={() => setIsTerminalOpen(false)} />
+  }
+
   return (
     <div className="space-y-4 font-mono select-none animate-fade-in">
       {/* 1. Navigation & Breadcrumb Header */}
@@ -66,6 +73,15 @@ export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock: initial
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             <span>Back to Markets</span>
+          </button>
+
+          <button
+            onClick={() => setIsTerminalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors cursor-pointer text-xs font-bold"
+            title="Open Dedicated Full-Screen Trading Terminal"
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+            <span>Full Chart</span>
           </button>
 
           <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
@@ -176,7 +192,10 @@ export const StockDetailPage: React.FC<StockDetailPageProps> = ({ stock: initial
       </div>
 
       {/* 4. Interactive Historical Price Chart (real OHLCV candles) */}
-      <HistoricalPriceChart stock={stock} />
+      <HistoricalPriceChart
+        stock={stock}
+        onOpenFullChart={() => setIsTerminalOpen(true)}
+      />
 
       {/* 5. Basic Company Information & Fundamentals */}
       <CompanyProfile stock={stock} />
