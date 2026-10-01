@@ -59,10 +59,11 @@ export const marketService = {
   },
 
   /**
-   * Get historical OHLCV daily data points for a symbol
+   * Get historical OHLCV daily/intraday data points for a symbol with optional timeframe range
    */
-  async getHistory(symbol: string): Promise<StockHistory> {
-    const res = await api.get<ApiResponse<StockHistory>>(`/market/history/${encodeURIComponent(symbol)}`)
+  async getHistory(symbol: string, range?: string): Promise<StockHistory> {
+    const params = range ? { range } : {}
+    const res = await api.get<ApiResponse<StockHistory>>(`/market/history/${encodeURIComponent(symbol)}`, { params })
     return res.data.data
   },
 }

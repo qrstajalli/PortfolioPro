@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 public class HistoricalDataPointDto {
 
     private String date;
+    private Long timestamp;
     private BigDecimal open;
     private BigDecimal high;
     private BigDecimal low;

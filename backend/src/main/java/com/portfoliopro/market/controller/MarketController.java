@@ -49,9 +49,11 @@ public class MarketController {
 
     @GetMapping("/history/{symbol}")
     public ResponseEntity<ApiResponse<StockHistoryDto>> getStockHistory(
-            @PathVariable("symbol") String symbol) {
-        StockHistoryDto history = marketDataProvider.getHistoricalPrices(symbol)
-                .orElseThrow(() -> new ResourceNotFoundException("Stock history", "symbol", symbol));
+            @PathVariable("symbol") String symbol,
+            @RequestParam(value = "range", required = false) String range) {
+        StockHistoryDto history = (range != null && !range.isBlank())
+                ? marketDataProvider.getHistoricalPrices(symbol, range).orElseThrow(() -> new ResourceNotFoundException("Stock history", "symbol", symbol))
+                : marketDataProvider.getHistoricalPrices(symbol).orElseThrow(() -> new ResourceNotFoundException("Stock history", "symbol", symbol));
         return ResponseEntity.ok(ApiResponse.ok("Historical data retrieved successfully", history));
     }
 }

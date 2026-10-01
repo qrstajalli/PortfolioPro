@@ -61,6 +61,7 @@ export interface StockQuote {
 
 export interface HistoricalCandle {
   date: string
+  timestamp?: number
   open: number
   high: number
   low: number

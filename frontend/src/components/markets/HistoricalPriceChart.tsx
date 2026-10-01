@@ -1,519 +1,528 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  TrendingUp,
-  TrendingDown,
+  createChart,
+  CandlestickSeries,
+  HistogramSeries,
+  CrosshairMode,
+  ColorType,
+  LineStyle,
+  type IChartApi,
+  type ISeriesApi,
+  type CandlestickData,
+  type HistogramData,
+  type Time,
+  type UTCTimestamp,
+} from 'lightweight-charts'
+import {
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Maximize2,
+  Layers,
 } from 'lucide-react'
-import type { StockQuote, StockHistory, HistoricalCandle } from '../../types/auth'
+import type { StockQuote, StockHistory } from '../../types/auth'
 import marketService from '../../services/marketService'
 
-export type ChartTimeframe = '1D' | '1W' | '1M' | '3M' | '1Y' | 'ALL'
-export type ChartStyle = 'area' | 'candlestick'
+export type ChartTimeframe = '1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | '5Y' | 'ALL'
 
 interface HistoricalPriceChartProps {
   stock: StockQuote
   onTimeframeChange?: (tf: ChartTimeframe) => void
 }
 
-interface PriceNode {
-  timestamp: string
-  label: string
-  price: number
+interface HoveredCandleData {
+  time: string
   open: number
   high: number
   low: number
   close: number
   volume: number
-  x: number
-  y: number
+  change: number
+  changePercent: number
+  isGain: boolean
 }
 
 export const HistoricalPriceChart: React.FC<HistoricalPriceChartProps> = ({ stock }) => {
   const [timeframe, setTimeframe] = useState<ChartTimeframe>('1M')
-  const [chartStyle, setChartStyle] = useState<ChartStyle>('area')
-  const [hoveredNode, setHoveredNode] = useState<PriceNode | null>(null)
-  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null)
-  const [history, setHistory] = useState<StockHistory | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [history, setHistory] = useState<StockHistory | null>(null)
+  const [hoveredCandle, setHoveredCandle] = useState<HoveredCandleData | null>(null)
+  const [latestCandle, setLatestCandle] = useState<HoveredCandleData | null>(null)
+
+  const chartContainerRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<IChartApi | null>(null)
+  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
 
   const isUSD = stock.currency === 'USD' || stock.exchange === 'NASDAQ'
   const currentPrice = Number(stock.currentPrice || stock.price || 0)
 
-  const formatPrice = (val: number) => {
-    const sym = isUSD ? '$' : '₹'
-    const locale = isUSD ? 'en-US' : 'en-IN'
-    return `${sym}${Number(val).toLocaleString(locale, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`
+  const formatCurrency = useCallback(
+    (val: number) => {
+      const sym = isUSD ? '$' : '₹'
+      const locale = isUSD ? 'en-US' : 'en-IN'
+      return `${sym}${Number(val).toLocaleString(locale, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`
+    },
+    [isUSD]
+  )
+
+  const formatVolume = (val: number) => {
+    if (!val || val <= 0) return '0'
+    if (val >= 1_000_000_000) return `${(val / 1_000_000_000).toFixed(2)}B`
+    if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2)}M`
+    if (val >= 1_000) return `${(val / 1_000).toFixed(1)}k`
+    return val.toLocaleString()
   }
 
-  // Fetch real historical candles from backend MarketDataProvider
+  // 1. Fetch real historical candles from backend for selected timeframe
   useEffect(() => {
     let isMounted = true
     setLoading(true)
     setError(null)
 
     marketService
-      .getHistory(stock.symbol)
+      .getHistory(stock.symbol, timeframe)
       .then((data) => {
-        if (isMounted) {
+        if (!isMounted) return
+        if (!data || !data.candles || data.candles.length === 0) {
+          setError(`No historical market data available for ${stock.symbol} (${timeframe})`)
+          setHistory(null)
+        } else {
           setHistory(data)
-          setLoading(false)
+          setError(null)
         }
+        setLoading(false)
       })
       .catch((err) => {
-        if (isMounted) {
-          const msg =
-            err.response?.data?.message ||
-            'Historical market data temporarily unavailable from provider'
-          setError(msg)
-          setLoading(false)
-        }
+        if (!isMounted) return
+        const msg =
+          err.response?.data?.message ||
+          'Historical market data temporarily unavailable from provider'
+        setError(msg)
+        setHistory(null)
+        setLoading(false)
       })
 
     return () => {
       isMounted = false
     }
-  }, [stock.symbol])
+  }, [stock.symbol, timeframe])
 
-  // Filter real candles based on chosen timeframe
-  const chartData = useMemo(() => {
-    if (!history?.candles || history.candles.length === 0) {
-      return []
+  // 2. Initialize Lightweight Chart instance
+  useEffect(() => {
+    if (!chartContainerRef.current) return
+
+    // Detect dark mode
+    const isDark = document.documentElement.classList.contains('dark')
+
+    const chartOptions = {
+      layout: {
+        background: { type: ColorType.Solid, color: 'transparent' },
+        textColor: isDark ? '#94a3b8' : '#64748b',
+        fontSize: 11,
+        fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
+      },
+      grid: {
+        vertLines: { color: isDark ? '#151e30' : '#f1f5f9', style: LineStyle.SparseDotted },
+        horzLines: { color: isDark ? '#151e30' : '#f1f5f9', style: LineStyle.SparseDotted },
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: {
+          color: '#3b82f6',
+          width: 1 as const,
+          style: LineStyle.Dashed,
+          labelBackgroundColor: isDark ? '#1e293b' : '#334155',
+        },
+        horzLine: {
+          color: '#3b82f6',
+          width: 1 as const,
+          style: LineStyle.Dashed,
+          labelBackgroundColor: isDark ? '#1e293b' : '#334155',
+        },
+      },
+      rightPriceScale: {
+        borderVisible: false,
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.22, // Reserve lower 22% for volume bars
+        },
+        alignLabels: true,
+      },
+      timeScale: {
+        borderVisible: false,
+        timeVisible: timeframe === '1D' || timeframe === '1W',
+        secondsVisible: false,
+        rightOffset: 5,
+        barSpacing: 8,
+        minBarSpacing: 2,
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+      },
+      handleScale: {
+        axisPressedMouseMove: true,
+        mouseWheel: true,
+        pinch: true,
+      },
     }
 
-    const allCandles = [...history.candles] // sorted chronologically (oldest to newest)
+    const chart = createChart(chartContainerRef.current, {
+      ...chartOptions,
+      width: chartContainerRef.current.clientWidth,
+      height: 420,
+    })
 
-    let sliceCount = 30
-    switch (timeframe) {
-      case '1D':
-        sliceCount = 2
-        break
-      case '1W':
-        sliceCount = 7
-        break
-      case '1M':
-        sliceCount = 30
-        break
-      case '3M':
-        sliceCount = 65
-        break
-      case '1Y':
-      case 'ALL':
-        sliceCount = allCandles.length
-        break
+    // Candlestick series
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderVisible: false,
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
+      priceFormat: {
+        type: 'price',
+        precision: 2,
+        minMove: 0.01,
+      },
+    })
+
+    // Volume histogram series (overlay on bottom margin)
+    const volumeSeries = chart.addSeries(HistogramSeries, {
+      priceFormat: {
+        type: 'volume',
+      },
+      priceScaleId: '', // Set as overlay
+    })
+
+    volumeSeries.priceScale().applyOptions({
+      scaleMargins: {
+        top: 0.8, // volume bars occupy bottom 20%
+        bottom: 0,
+      },
+    })
+
+    chartRef.current = chart
+    candleSeriesRef.current = candlestickSeries
+    volumeSeriesRef.current = volumeSeries
+
+    // Crosshair movement subscription for live HUD stats
+    chart.subscribeCrosshairMove((param) => {
+      if (!param || !param.time || !param.seriesData || !candlestickSeries) {
+        setHoveredCandle(null)
+        return
+      }
+
+      const candleData = param.seriesData.get(candlestickSeries) as
+        | { open: number; high: number; low: number; close: number }
+        | undefined
+
+      const volData = param.seriesData.get(volumeSeries) as { value: number } | undefined
+
+      if (candleData && typeof candleData.open === 'number') {
+        const o = candleData.open
+        const h = candleData.high
+        const l = candleData.low
+        const c = candleData.close
+        const v = volData?.value || 0
+        const chg = c - o
+        const chgPct = o > 0 ? (chg / o) * 100 : 0
+
+        let timeStr = String(param.time)
+        if (typeof param.time === 'number') {
+          const d = new Date(param.time * 1000)
+          timeStr = d.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: timeframe === '1D' || timeframe === '1W' ? '2-digit' : undefined,
+            minute: timeframe === '1D' || timeframe === '1W' ? '2-digit' : undefined,
+          })
+        }
+
+        setHoveredCandle({
+          time: timeStr,
+          open: o,
+          high: h,
+          low: l,
+          close: c,
+          volume: v,
+          change: chg,
+          changePercent: chgPct,
+          isGain: chg >= 0,
+        })
+      } else {
+        setHoveredCandle(null)
+      }
+    })
+
+    // ResizeObserver for responsive chart auto-fitting
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (!entries || entries.length === 0 || !chartRef.current) return
+      const { width } = entries[0].contentRect
+      if (width > 0) {
+        chartRef.current.applyOptions({ width })
+      }
+    })
+
+    resizeObserver.observe(chartContainerRef.current)
+
+    return () => {
+      resizeObserver.disconnect()
+      chart.remove()
+      chartRef.current = null
+      candleSeriesRef.current = null
+      volumeSeriesRef.current = null
     }
+  }, [timeframe])
 
-    const targetCandles: HistoricalCandle[] = allCandles.slice(-Math.min(sliceCount, allCandles.length))
+  // 3. Populate chart with real OHLCV candles
+  useEffect(() => {
+    if (!history?.candles || history.candles.length === 0) return
+    if (!candleSeriesRef.current || !volumeSeriesRef.current || !chartRef.current) return
 
-    return targetCandles.map((c) => {
+    // Sort chronologically and deduplicate timestamps
+    const rawCandles = [...history.candles].sort((a, b) => {
+      const aTime = a.timestamp || new Date(a.date.replace(' ', 'T')).getTime() / 1000
+      const bTime = b.timestamp || new Date(b.date.replace(' ', 'T')).getTime() / 1000
+      return aTime - bTime
+    })
+
+    const seenTimes = new Set<string>()
+    const candleDataList: CandlestickData<Time>[] = []
+    const volumeDataList: HistogramData<Time>[] = []
+
+    for (const c of rawCandles) {
       const open = Number(c.open)
       const high = Number(c.high)
       const low = Number(c.low)
       const close = Number(c.close)
       const volume = Number(c.volume || 0)
 
-      // Format date label
-      let label = c.date
-      try {
-        const d = new Date(c.date)
-        label = `${d.getDate()} ${d.toLocaleString('en-US', { month: 'short' })}`
-      } catch {
-        label = c.date
+      if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close) || open <= 0) {
+        continue
       }
 
-      return {
+      // If intraday (has space in date string or timeframe 1D/1W), use epoch seconds; else use 'YYYY-MM-DD'
+      let timeKey: Time
+      if (c.date.includes(' ') || timeframe === '1D' || timeframe === '1W') {
+        const epochSec = c.timestamp
+          ? c.timestamp
+          : Math.floor(new Date(c.date.replace(' ', 'T') + 'Z').getTime() / 1000)
+        timeKey = epochSec as UTCTimestamp
+      } else {
+        timeKey = c.date.slice(0, 10)
+      }
+
+      const dedupeKey = String(timeKey)
+      if (seenTimes.has(dedupeKey)) continue
+      seenTimes.add(dedupeKey)
+
+      const isUp = close >= open
+
+      candleDataList.push({
+        time: timeKey,
         open,
         high,
         low,
         close,
-        volume,
-        label,
-        timestamp: c.date,
-      }
-    })
+      })
+
+      volumeDataList.push({
+        time: timeKey,
+        value: volume,
+        color: isUp ? 'rgba(34, 197, 94, 0.45)' : 'rgba(239, 68, 68, 0.45)',
+      })
+    }
+
+    if (candleDataList.length > 0) {
+      candleSeriesRef.current.setData(candleDataList)
+      volumeSeriesRef.current.setData(volumeDataList)
+      chartRef.current.timeScale().fitContent()
+
+      // Set default latest candle HUD
+      const last = candleDataList[candleDataList.length - 1]
+      const lastVol = volumeDataList[volumeDataList.length - 1]?.value || 0
+      const chg = last.close - last.open
+      const chgPct = last.open > 0 ? (chg / last.open) * 100 : 0
+
+      setLatestCandle({
+        time: String(last.time),
+        open: last.open,
+        high: last.high,
+        low: last.low,
+        close: last.close,
+        volume: lastVol,
+        change: chg,
+        changePercent: chgPct,
+        isGain: chg >= 0,
+      })
+    }
   }, [history, timeframe])
 
-  // Coordinate mapping for SVG view
-  const viewW = 800
-  const viewH = 240
-  const padX = 20
-  const padTop = 20
-  const padBottom = 50 // space for volume histogram
-  const usableW = viewW - padX * 2
-  const usableH = viewH - padTop - padBottom
-
-  const allLows = chartData.map((d) => d.low)
-  const allHighs = chartData.map((d) => d.high)
-  const minPrice = allLows.length > 0 ? Math.min(...allLows) * 0.998 : currentPrice * 0.95
-  const maxPrice = allHighs.length > 0 ? Math.max(...allHighs) * 1.002 : currentPrice * 1.05
-  const priceRange = maxPrice - minPrice || 1
-
-  const maxVolume = chartData.length > 0 ? Math.max(...chartData.map((d) => d.volume)) || 1 : 1
-
-  // Project points to coordinates
-  const nodes: PriceNode[] = chartData.map((item, idx) => {
-    const x = chartData.length > 1 ? padX + (idx / (chartData.length - 1)) * usableW : padX + usableW / 2
-    const y = padTop + usableH - ((item.close - minPrice) / priceRange) * usableH
-    return {
-      ...item,
-      price: item.close,
-      x,
-      y,
+  // Fit content helper
+  const handleResetZoom = () => {
+    if (chartRef.current) {
+      chartRef.current.timeScale().fitContent()
     }
-  })
-
-  // Calculate return stats for the current timeframe
-  const startPrice = nodes[0]?.open || currentPrice
-  const endPrice = nodes[nodes.length - 1]?.close || currentPrice
-  const periodReturn = endPrice - startPrice
-  const periodReturnPct = startPrice > 0 ? (periodReturn / startPrice) * 100 : 0
-  const isPeriodGain = periodReturn >= 0
-
-  // SVG Area & Line Path
-  const lineD = nodes.reduce((acc, pt, i) => {
-    return i === 0 ? `M ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}` : `${acc} L ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`
-  }, '')
-
-  const lastNode = nodes[nodes.length - 1]
-  const firstNode = nodes[0]
-  const baselineY = padTop + usableH
-  const areaD =
-    nodes.length > 1
-      ? `${lineD} L ${lastNode.x.toFixed(1)} ${baselineY} L ${firstNode.x.toFixed(1)} ${baselineY} Z`
-      : ''
-
-  // Handle mouse movement for crosshairs
-  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (nodes.length === 0) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const mouseX = ((e.clientX - rect.left) / rect.width) * viewW
-    const mouseY = ((e.clientY - rect.top) / rect.height) * viewH
-
-    let closest = nodes[0]
-    let minDiff = Infinity
-    nodes.forEach((n) => {
-      const diff = Math.abs(n.x - mouseX)
-      if (diff < minDiff) {
-        minDiff = diff
-        closest = n
-      }
-    })
-
-    setHoveredNode(closest)
-    setMousePos({ x: closest.x, y: mouseY })
   }
 
-  const handleMouseLeave = () => {
-    setHoveredNode(null)
-    setMousePos(null)
-  }
-
-  const activeDisplayNode = hoveredNode || lastNode
+  const activeHud = hoveredCandle || latestCandle
 
   return (
-    <div className="rounded-md border border-slate-200 dark:border-[#1b2537] bg-white dark:bg-[#0c1220] shadow-xs select-none font-mono">
-      {/* 1. Chart Control & Summary Header */}
-      <div className="p-3.5 border-b border-slate-200 dark:border-[#182235] flex flex-wrap items-center justify-between gap-3">
-        {/* Left: Current Price & Period Change Info */}
-        <div className="flex items-baseline gap-3">
-          <span className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tabular-nums tracking-tight">
-            {(activeDisplayNode ? activeDisplayNode.price : currentPrice) > 0
-              ? formatPrice(activeDisplayNode ? activeDisplayNode.price : currentPrice)
-              : 'Market data unavailable'}
-          </span>
-          {nodes.length > 0 && startPrice > 0 && (
-            <div
-              className={`text-xs font-bold tabular-nums flex items-center gap-1 ${
-                isPeriodGain ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-              }`}
-            >
-              {isPeriodGain ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-              <span>
-                {isPeriodGain ? '+' : ''}
-                {formatPrice((activeDisplayNode?.price || endPrice) - startPrice)} ({isPeriodGain ? '+' : ''}
-                {((((activeDisplayNode?.price || endPrice) - startPrice) / startPrice) * 100).toFixed(2)}%)
-              </span>
-              <span className="text-[10px] text-slate-500 font-normal">in {timeframe}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Right: Chart Controls (Timeframe + Style Toggle) */}
-        <div className="flex items-center gap-2">
-          {/* Chart Style Toggle */}
-          <div className="flex items-center p-0.5 rounded bg-slate-100 dark:bg-[#070b13] border border-slate-200 dark:border-[#1b2537]">
-            <button
-              onClick={() => setChartStyle('area')}
-              className={`px-2 py-1 text-[11px] rounded transition-colors cursor-pointer ${
-                chartStyle === 'area'
-                  ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white font-semibold shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-              }`}
-              title="Line / Area View"
-            >
-              Area
-            </button>
-            <button
-              onClick={() => setChartStyle('candlestick')}
-              className={`px-2 py-1 text-[11px] rounded transition-colors cursor-pointer ${
-                chartStyle === 'candlestick'
-                  ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white font-semibold shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-              }`}
-              title="Candlestick View"
-            >
-              Candles
-            </button>
-          </div>
-
-          {/* Timeframe Selectors */}
-          <div className="flex items-center p-0.5 rounded bg-slate-100 dark:bg-[#070b13] border border-slate-200 dark:border-[#1b2537]">
-            {(['1D', '1W', '1M', '3M', '1Y', 'ALL'] as const).map((tf) => (
+    <div className="rounded-lg border border-slate-200 dark:border-[#182338] bg-white dark:bg-[#0c1220] shadow-sm select-none font-mono overflow-hidden">
+      {/* 1. Header Toolbar: Real Timeframe Selector & Chart Actions */}
+      <div className="p-3 border-b border-slate-200 dark:border-[#162033] flex flex-wrap items-center justify-between gap-3 bg-slate-50/70 dark:bg-[#0a0f1d]">
+        {/* Left: Timeframe Buttons */}
+        <div className="flex items-center gap-1">
+          <div className="flex items-center p-0.5 rounded-md bg-slate-200/70 dark:bg-[#121a2c] border border-slate-300/50 dark:border-[#1e2a42]">
+            {(['1D', '1W', '1M', '3M', '6M', '1Y', '5Y', 'ALL'] as const).map((tf) => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
-                className={`px-2.5 py-1 text-[11px] rounded transition-colors cursor-pointer ${
+                className={`px-2.5 py-1 text-[11px] rounded transition-all cursor-pointer font-bold ${
                   timeframe === tf
-                    ? 'bg-white dark:bg-[#18233a] text-blue-600 dark:text-blue-400 font-bold border border-slate-200 dark:border-blue-500/30 shadow-xs'
-                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
                 }`}
+                title={`View ${tf} historical timeframe`}
               >
                 {tf}
               </button>
             ))}
           </div>
+
+          <span className="hidden sm:inline-block text-[11px] text-slate-500 dark:text-slate-400 pl-2">
+            Twelve Data Real OHLCV Feed
+          </span>
+        </div>
+
+        {/* Right: Chart Controls & Fit Button */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleResetZoom}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded bg-white dark:bg-[#141d30] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#1e2c45] shadow-xs cursor-pointer transition-colors"
+            title="Fit / Reset Zoom to all available historical candles"
+          >
+            <Maximize2 className="h-3 w-3 text-blue-500" />
+            <span>Fit Content</span>
+          </button>
+
+          <div className="hidden md:flex items-center gap-1 px-2 py-1 rounded bg-slate-100 dark:bg-[#121a2c] border border-slate-200 dark:border-[#1e2a42] text-[10px] text-slate-500 dark:text-slate-400">
+            <Layers className="h-3 w-3 text-emerald-500" />
+            <span>Candles + Vol</span>
+          </div>
         </div>
       </div>
 
-      {/* 2. Interactive SVG Canvas or Status Banner */}
-      <div className="relative p-2.5 bg-slate-50/50 dark:bg-[#090e1a] min-h-64 flex items-center justify-center">
-        {loading && (
-          <div className="flex flex-col items-center gap-2 text-slate-500 text-xs py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-            <span>Loading daily historical series from Twelve Data...</span>
+      {/* 2. Professional Candle OHLC HUD Bar */}
+      <div className="px-3.5 py-2 border-b border-slate-100 dark:border-[#141d2f] bg-slate-50/40 dark:bg-[#0b101e] flex flex-wrap items-center justify-between gap-3 text-xs">
+        {/* Selected / Latest Candle Metrics */}
+        {activeHud ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-600 dark:text-slate-300">
+            <span className="text-slate-900 dark:text-white font-bold">{activeHud.time}</span>
+            <span>
+              O: <strong className="text-slate-800 dark:text-slate-100 font-semibold">{formatCurrency(activeHud.open)}</strong>
+            </span>
+            <span>
+              H: <strong className="text-emerald-600 dark:text-emerald-400 font-semibold">{formatCurrency(activeHud.high)}</strong>
+            </span>
+            <span>
+              L: <strong className="text-rose-600 dark:text-rose-400 font-semibold">{formatCurrency(activeHud.low)}</strong>
+            </span>
+            <span>
+              C: <strong className="text-slate-900 dark:text-white font-bold">{formatCurrency(activeHud.close)}</strong>
+            </span>
+            <span
+              className={`font-bold flex items-center gap-0.5 ${
+                activeHud.isGain ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+              }`}
+            >
+              {activeHud.isGain ? '+' : ''}
+              {formatCurrency(activeHud.change)} ({activeHud.isGain ? '+' : ''}
+              {activeHud.changePercent.toFixed(2)}%)
+            </span>
+            <span>
+              Vol: <strong className="text-blue-600 dark:text-blue-400 font-semibold">{formatVolume(activeHud.volume)}</strong>
+            </span>
+          </div>
+        ) : (
+          <div className="text-[11px] text-slate-500 italic">
+            Hover over chart candles to inspect historical OHLCV data
           </div>
         )}
 
+        {/* Currency & Interaction Guidance */}
+        <div className="hidden lg:flex items-center gap-2 text-[10px] text-slate-500">
+          <span>Currency: <strong className="text-slate-700 dark:text-slate-300">{isUSD ? 'USD ($)' : 'INR (₹)'}</strong></span>
+          <span>•</span>
+          <span>Mouse Wheel: Zoom</span>
+          <span>•</span>
+          <span>Drag: Pan</span>
+        </div>
+      </div>
+
+      {/* 3. Main Chart Canvas Area */}
+      <div className="relative min-h-[420px] bg-white dark:bg-[#0c1220] flex items-center justify-center">
+        {/* Loading Spinner */}
+        {loading && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-white/70 dark:bg-[#0c1220]/80 backdrop-blur-xs text-xs text-slate-500">
+            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            <span className="font-semibold text-slate-700 dark:text-slate-300">
+              Loading {timeframe} real historical data from Twelve Data...
+            </span>
+          </div>
+        )}
+
+        {/* Error Overlay */}
         {!loading && error && (
-          <div className="flex flex-col items-center gap-2 text-slate-500 text-xs py-16 px-4 text-center max-w-md">
-            <AlertCircle className="h-6 w-6 text-amber-500" />
-            <span className="font-semibold text-slate-700 dark:text-slate-300">Historical data unavailable</span>
+          <div className="flex flex-col items-center gap-2 text-slate-500 text-xs py-20 px-4 text-center max-w-md">
+            <AlertCircle className="h-7 w-7 text-amber-500" />
+            <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+              Historical market data unavailable
+            </span>
             <span className="text-[11px] text-slate-500">{error}</span>
           </div>
         )}
 
-        {!loading && !error && nodes.length === 0 && (
-          <div className="text-slate-500 text-xs py-16 text-center">
-            No historical price records returned by the data provider for {stock.symbol}.
-          </div>
-        )}
-
-        {!loading && !error && nodes.length > 0 && (
-          <>
-            {/* Floating Crosshair HUD */}
-            {hoveredNode && (
-              <div className="absolute top-4 left-4 z-20 pointer-events-none bg-white/95 dark:bg-[#070b14]/90 backdrop-blur border border-slate-200 dark:border-[#1c2638] px-3 py-1.5 rounded shadow-lg text-[10px] space-x-3 text-slate-700 dark:text-slate-300">
-                <span className="text-slate-900 dark:text-white font-bold">{hoveredNode.timestamp}</span>
-                <span>O: <span className="text-slate-700 dark:text-slate-100">{formatPrice(hoveredNode.open)}</span></span>
-                <span>H: <span className="text-emerald-600 dark:text-emerald-400">{formatPrice(hoveredNode.high)}</span></span>
-                <span>L: <span className="text-rose-600 dark:text-rose-400">{formatPrice(hoveredNode.low)}</span></span>
-                <span>C: <span className="text-slate-900 dark:text-white font-bold">{formatPrice(hoveredNode.close)}</span></span>
-                <span>Vol: <span className="text-blue-600 dark:text-blue-400">{(hoveredNode.volume / 1000).toFixed(0)}k</span></span>
-              </div>
-            )}
-
-            <svg
-              viewBox={`0 0 ${viewW} ${viewH}`}
-              className="w-full h-64 sm:h-72 cursor-crosshair overflow-visible"
-              onMouseMove={handleMouseMove}
-              onMouseLeave={handleMouseLeave}
-            >
-              <defs>
-                <linearGradient id="chartGainGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.32" />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-                </linearGradient>
-                <linearGradient id="chartLossGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.32" />
-                  <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
-
-              {/* Grid lines */}
-              {[0.2, 0.4, 0.6, 0.8].map((pct) => {
-                const y = padTop + usableH * pct
-                const p = maxPrice - pct * priceRange
-                return (
-                  <g key={pct}>
-                    <line x1={padX} y1={y} x2={viewW - padX} y2={y} stroke="currentColor" className="text-slate-200 dark:text-[#141d2d]" strokeDasharray="3 3" />
-                    <text x={viewW - padX - 4} y={y - 3} fill="currentColor" className="text-slate-400 dark:text-[#475569]" fontSize="8" textAnchor="end">
-                      {formatPrice(p)}
-                    </text>
-                  </g>
-                )
-              })}
-
-              {/* Volume sub-chart background baseline */}
-              <line
-                x1={padX}
-                y1={padTop + usableH}
-                x2={viewW - padX}
-                y2={padTop + usableH}
-                stroke="currentColor"
-                className="text-slate-300 dark:text-[#1c2638]"
-                strokeWidth="1"
-              />
-
-              {/* Volume Histogram Bars */}
-              {nodes.map((node, i) => {
-                const barH = (node.volume / maxVolume) * 35
-                const barY = viewH - 18 - barH
-                const isUp = node.close >= node.open
-                const barW = Math.max(2, usableW / nodes.length - 2)
-
-                return (
-                  <rect
-                    key={`vol-${i}`}
-                    x={node.x - barW / 2}
-                    y={barY}
-                    width={barW}
-                    height={barH}
-                    fill={isUp ? '#10b981' : '#f43f5e'}
-                    opacity={hoveredNode?.x === node.x ? 0.9 : 0.35}
-                    rx="0.5"
-                  />
-                )
-              })}
-
-              {/* AREA / LINE MODE */}
-              {chartStyle === 'area' && (
-                <>
-                  <path
-                    d={areaD}
-                    fill={isPeriodGain ? 'url(#chartGainGradient)' : 'url(#chartLossGradient)'}
-                  />
-                  <path
-                    d={lineD}
-                    fill="none"
-                    stroke={isPeriodGain ? '#10b981' : '#f43f5e'}
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </>
-              )}
-
-              {/* CANDLESTICK MODE */}
-              {chartStyle === 'candlestick' &&
-                nodes.map((node, i) => {
-                  const isUp = node.close >= node.open
-                  const highY = padTop + usableH - ((node.high - minPrice) / priceRange) * usableH
-                  const lowY = padTop + usableH - ((node.low - minPrice) / priceRange) * usableH
-                  const openY = padTop + usableH - ((node.open - minPrice) / priceRange) * usableH
-                  const closeY = padTop + usableH - ((node.close - minPrice) / priceRange) * usableH
-
-                  const bodyTop = Math.min(openY, closeY)
-                  const bodyHeight = Math.max(2.5, Math.abs(closeY - openY))
-                  const candleW = Math.max(3, Math.min(10, usableW / nodes.length - 3))
-
-                  return (
-                    <g key={`candle-${i}`}>
-                      <line
-                        x1={node.x}
-                        y1={highY}
-                        x2={node.x}
-                        y2={lowY}
-                        stroke={isUp ? '#10b981' : '#f43f5e'}
-                        strokeWidth="1.2"
-                      />
-                      <rect
-                        x={node.x - candleW / 2}
-                        y={bodyTop}
-                        width={candleW}
-                        height={bodyHeight}
-                        fill={isUp ? '#10b981' : '#f43f5e'}
-                        rx="1"
-                      />
-                    </g>
-                  )
-                })}
-
-              {/* Active Hover Crosshair Line */}
-              {hoveredNode && mousePos && (
-                <g>
-                  <line
-                    x1={hoveredNode.x}
-                    y1={padTop}
-                    x2={hoveredNode.x}
-                    y2={viewH - 18}
-                    stroke="#3b82f6"
-                    strokeWidth="1"
-                    strokeDasharray="3 3"
-                  />
-                  <line
-                    x1={padX}
-                    y1={hoveredNode.y}
-                    x2={viewW - padX}
-                    y2={hoveredNode.y}
-                    stroke="#3b82f6"
-                    strokeWidth="1"
-                    strokeDasharray="3 3"
-                  />
-                  <circle cx={hoveredNode.x} cy={hoveredNode.y} r="3.5" fill="#3b82f6" stroke="#ffffff" strokeWidth="1.5" />
-                </g>
-              )}
-
-              {/* Time Labels on X-axis */}
-              {nodes
-                .filter((_, i) => i % Math.max(1, Math.ceil(nodes.length / 6)) === 0 || i === nodes.length - 1)
-                .map((node, i) => (
-                  <text
-                    key={`label-${i}`}
-                    x={node.x}
-                    y={viewH - 4}
-                    fill="currentColor"
-                    className="text-slate-400 dark:text-[#64748b]"
-                    fontSize="9"
-                    textAnchor="middle"
-                  >
-                    {node.label}
-                  </text>
-                ))}
-            </svg>
-          </>
-        )}
+        {/* TradingView Lightweight Charts DOM Canvas Mount */}
+        <div
+          ref={chartContainerRef}
+          className={`w-full h-[420px] ${!error ? 'block' : 'hidden'}`}
+        />
       </div>
 
-      {/* 3. Range & Statistics Footer */}
-      <div className="p-3 border-t border-slate-200 dark:border-[#182235] bg-slate-50 dark:bg-[#070b14] grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+      {/* 4. Chart Footer Summary Statistics */}
+      <div className="p-3 border-t border-slate-200 dark:border-[#162033] bg-slate-50 dark:bg-[#0a0f1d] grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
         <div>
-          <span className="text-[10px] text-slate-500 uppercase">Period High</span>
-          <div className="font-bold text-slate-900 dark:text-white mt-0.5">{formatPrice(minPrice > 0 ? maxPrice : 0)}</div>
-        </div>
-        <div>
-          <span className="text-[10px] text-slate-500 uppercase">Period Low</span>
-          <div className="font-bold text-slate-900 dark:text-white mt-0.5">{formatPrice(minPrice > 0 ? minPrice : 0)}</div>
-        </div>
-        <div>
-          <span className="text-[10px] text-slate-500 uppercase">Period Return</span>
-          <div className={`font-bold mt-0.5 ${isPeriodGain ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-            {nodes.length > 0 ? (
-              <>
-                {isPeriodGain ? '+' : ''}{formatPrice(periodReturn)} ({isPeriodGain ? '+' : ''}{periodReturnPct.toFixed(2)}%)
-              </>
-            ) : (
-              '--'
-            )}
+          <span className="text-[10px] text-slate-500 uppercase tracking-wider">Timeframe Range</span>
+          <div className="font-bold text-slate-900 dark:text-white mt-0.5">
+            {timeframe} ({history?.candles?.length || 0} Candles)
           </div>
         </div>
         <div>
-          <span className="text-[10px] text-slate-500 uppercase">Candles Loaded</span>
-          <div className="font-bold text-blue-600 dark:text-blue-400 mt-0.5">
-            {chartData.length} Daily Sessions
+          <span className="text-[10px] text-slate-500 uppercase tracking-wider">Exchange & Timezone</span>
+          <div className="font-bold text-slate-900 dark:text-white mt-0.5">
+            {history?.exchange || stock.exchange} ({history?.timeZone || 'America/New_York'})
+          </div>
+        </div>
+        <div>
+          <span className="text-[10px] text-slate-500 uppercase tracking-wider">Latest Session Close</span>
+          <div className="font-bold text-slate-900 dark:text-white mt-0.5">
+            {latestCandle ? formatCurrency(latestCandle.close) : formatCurrency(currentPrice)}
+          </div>
+        </div>
+        <div>
+          <span className="text-[10px] text-slate-500 uppercase tracking-wider">Provider Status</span>
+          <div className="font-bold text-emerald-600 dark:text-emerald-400 mt-0.5 flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Twelve Data Authenticated
           </div>
         </div>
       </div>

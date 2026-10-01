@@ -22,4 +22,8 @@ public interface MarketDataProvider {
     List<StockQuoteDto> getQuotesBySector(String sector);
 
     Optional<StockHistoryDto> getHistoricalPrices(String symbol);
+
+    default Optional<StockHistoryDto> getHistoricalPrices(String symbol, String range) {
+        return getHistoricalPrices(symbol);
+    }
 }
