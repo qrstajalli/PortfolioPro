@@ -214,6 +214,7 @@ export const TradingTerminal: React.FC<TradingTerminalProps> = ({ stock: initial
       .then((fresh) => {
         if (isMounted && fresh && fresh.currentPrice) {
           setActiveStock(fresh)
+          setWatchlistQuotes((prev) => ({ ...prev, [fresh.symbol.toUpperCase()]: fresh }))
         }
       })
       .catch((err) => {
@@ -225,28 +226,22 @@ export const TradingTerminal: React.FC<TradingTerminalProps> = ({ stock: initial
     }
   }, [activeStock.symbol])
 
-  // 3. Batch load watchlist real quotes
+  // 3. Batch load watchlist real quotes without exhausting rate limit
   useEffect(() => {
     let isMounted = true
-    const allSymbols = [
-      ...WATCHLIST_SECTIONS.INDEXES.map((i) => i.symbol),
-      ...WATCHLIST_SECTIONS.STOCKS.map((s) => s.symbol),
-      ...WATCHLIST_SECTIONS.FOREX.map((f) => f.symbol),
-    ]
-
-    // Fetch in parallel chunks
-    allSymbols.forEach((sym) => {
-      marketService
-        .getQuote(sym)
-        .then((q) => {
-          if (isMounted && q && q.currentPrice) {
-            setWatchlistQuotes((prev) => ({ ...prev, [sym]: q }))
-          }
-        })
-        .catch(() => {
-          // Keep as unavailable
-        })
-    })
+    marketService
+      .getStocks()
+      .then((stocks) => {
+        if (!isMounted || !stocks) return
+        const map: Record<string, StockQuote> = {}
+        for (const s of stocks) {
+          map[s.symbol.toUpperCase()] = s
+        }
+        setWatchlistQuotes((prev) => ({ ...prev, ...map }))
+      })
+      .catch((err) => {
+        console.warn('Could not batch load watchlist quotes:', err)
+      })
 
     return () => {
       isMounted = false
@@ -258,6 +253,7 @@ export const TradingTerminal: React.FC<TradingTerminalProps> = ({ stock: initial
     let isMounted = true
     setChartLoading(true)
     setChartError(null)
+    setHoveredData(null)
 
     marketService
       .getHistory(activeStock.symbol, activeTimeframe)
@@ -266,6 +262,7 @@ export const TradingTerminal: React.FC<TradingTerminalProps> = ({ stock: initial
         if (!data || !data.candles || data.candles.length === 0) {
           setChartError(`No historical market data available for ${activeStock.symbol} (${activeTimeframe})`)
           setHistory(null)
+          setLatestCandle(null)
         } else {
           setHistory(data)
           setChartError(null)
@@ -274,8 +271,10 @@ export const TradingTerminal: React.FC<TradingTerminalProps> = ({ stock: initial
       })
       .catch((err) => {
         if (!isMounted) return
-        setChartError(err.message || 'Unable to retrieve historical market data')
+        const msg = err.response?.data?.message || err.message || 'Unable to retrieve historical market data'
+        setChartError(msg)
         setHistory(null)
+        setLatestCandle(null)
         setChartLoading(false)
       })
 
@@ -462,12 +461,18 @@ export const TradingTerminal: React.FC<TradingTerminalProps> = ({ stock: initial
         })
       }
 
-      // Sort chronological
-      candleDataList.sort((a, b) => String(a.time).localeCompare(String(b.time)))
-      volumeDataList.sort((a, b) => String(a.time).localeCompare(String(b.time)))
-      lineDataList.sort((a, b) => String(a.time).localeCompare(String(b.time)))
-      areaDataList.sort((a, b) => String(a.time).localeCompare(String(b.time)))
-      barDataList.sort((a, b) => String(a.time).localeCompare(String(b.time)))
+      // Safe chronological sort: handles epoch numeric timestamps & ISO date strings
+      const sortByTime = (a: { time: Time }, b: { time: Time }) => {
+        if (typeof a.time === 'number' && typeof b.time === 'number') {
+          return a.time - b.time
+        }
+        return String(a.time).localeCompare(String(b.time))
+      }
+      candleDataList.sort(sortByTime)
+      volumeDataList.sort(sortByTime)
+      lineDataList.sort(sortByTime)
+      areaDataList.sort(sortByTime)
+      barDataList.sort(sortByTime)
 
       if (chartType === 'line') {
         mainSeries.setData(lineDataList)
@@ -744,6 +749,36 @@ export const TradingTerminal: React.FC<TradingTerminalProps> = ({ stock: initial
       setTradeSubmitting(false)
     }
   }
+
+  // Timeframe summary metrics across the loaded historical candles
+  const timeframeMetrics = useMemo(() => {
+    if (!history?.candles || history.candles.length === 0) return null
+    const candles = history.candles
+    const first = candles[0]
+    const last = candles[candles.length - 1]
+    let periodHigh = -Infinity
+    let periodLow = Infinity
+    for (const c of candles) {
+      const h = Number(c.high)
+      const l = Number(c.low)
+      if (h > periodHigh) periodHigh = h
+      if (l < periodLow) periodLow = l
+    }
+    const openPrice = Number(first.open)
+    const closePrice = Number(last.close)
+    const returnAmt = closePrice - openPrice
+    const returnPct = openPrice > 0 ? (returnAmt / openPrice) * 100 : 0
+    return {
+      startDate: first.date.split(' ')[0],
+      endDate: last.date.split(' ')[0],
+      count: candles.length,
+      high: periodHigh,
+      low: periodLow,
+      returnAmount: returnAmt,
+      returnPercent: returnPct,
+      isPositive: returnAmt >= 0,
+    }
+  }, [history])
 
   const activeHud = hoveredData || latestCandle
   const availableCash = Number(wallet?.balance || 0)
@@ -1131,6 +1166,28 @@ export const TradingTerminal: React.FC<TradingTerminalProps> = ({ stock: initial
                     Vol <strong className="text-blue-400 font-mono">{formatVolume(activeHud.volume)}</strong>
                   </span>
                 )}
+              </div>
+            ) : timeframeMetrics ? (
+              <div className="flex items-center gap-3 text-[11px]">
+                <span className="text-slate-300 font-sans">
+                  {timeframeMetrics.startDate} → {timeframeMetrics.endDate}
+                </span>
+                <span>
+                  H <strong className="text-[#089981] font-mono">{formatPrice(timeframeMetrics.high)}</strong>
+                </span>
+                <span>
+                  L <strong className="text-[#f23645] font-mono">{formatPrice(timeframeMetrics.low)}</strong>
+                </span>
+                <span
+                  className={`font-bold font-mono ${timeframeMetrics.isPositive ? 'text-[#089981]' : 'text-[#f23645]'}`}
+                >
+                  Return {timeframeMetrics.isPositive ? '+' : ''}
+                  {timeframeMetrics.returnPercent.toFixed(2)}% ({timeframeMetrics.isPositive ? '+' : ''}
+                  {formatPrice(timeframeMetrics.returnAmount)})
+                </span>
+                <span className="text-slate-500">
+                  {timeframeMetrics.count} Candles
+                </span>
               </div>
             ) : (
               <span className="text-[11px] text-slate-600 italic">Twelve Data Real Market OHLCV Feed</span>
@@ -1641,8 +1698,10 @@ export const TradingTerminal: React.FC<TradingTerminalProps> = ({ stock: initial
 
         {/* Right: Quick Zoom controls & Range info */}
         <div className="flex items-center gap-3">
-          <span className="hidden sm:inline text-slate-500">
-            {history?.candles?.length || 0} Candles ({activeTimeframe})
+          <span className="hidden sm:inline text-slate-400 font-mono text-[11px]">
+            {timeframeMetrics
+              ? `${timeframeMetrics.count} Candles (${timeframeMetrics.startDate} → ${timeframeMetrics.endDate}) • ${activeTimeframe}`
+              : `${history?.candles?.length || 0} Candles (${activeTimeframe})`}
           </span>
 
           <div className="flex items-center gap-1 border-l border-[#2a2e39] pl-2">

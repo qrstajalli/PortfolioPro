@@ -545,7 +545,13 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
             case "1M" -> new TimeframeConfig("1day", 30);
             case "3M" -> new TimeframeConfig("1day", 90);
             case "6M" -> new TimeframeConfig("1day", 180);
-            case "YTD" -> new TimeframeConfig("1day", 260);
+            case "YTD" -> {
+                LocalDate now = LocalDate.now();
+                LocalDate jan1 = LocalDate.of(now.getYear(), 1, 1);
+                long days = java.time.temporal.ChronoUnit.DAYS.between(jan1, now);
+                int tradingDays = Math.max(30, (int) (days * 5 / 7) + 5);
+                yield new TimeframeConfig("1day", tradingDays);
+            }
             case "1Y" -> new TimeframeConfig("1day", 365);
             case "5Y" -> new TimeframeConfig("1day", 1300);
             case "ALL" -> new TimeframeConfig("1day", 1500);
@@ -570,49 +576,20 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
         TimeframeConfig tf = resolveTimeframe(range);
         String cacheKey = clean + "_" + cleanRange;
 
-        // 1. Check direct cache first
+        // 1. Check exact timeframe cache first
         CachedHistory cached = historyCache.get(cacheKey);
         if (cached != null && !cached.isExpired(HISTORY_CACHE_TTL_MS)) {
             log.debug("Returning cached Twelve Data historical candles for symbol: {} range: {}", clean, cleanRange);
             return Optional.of(cached.history());
         }
 
-        // 2. Check if a wider daily range is already cached (e.g. ALL, 5Y, 1Y) and can satisfy this daily request
-        if ("1day".equals(tf.interval())) {
-            for (String widerRange : List.of("ALL", "5Y", "1Y", "6M", "3M", "1M")) {
-                CachedHistory widerCached = historyCache.get(clean + "_" + widerRange);
-                if (widerCached != null && !widerCached.isExpired(HISTORY_CACHE_TTL_MS) && widerCached.history().getCandles() != null) {
-                    List<HistoricalDataPointDto> allCandles = widerCached.history().getCandles();
-                    if (allCandles.size() >= tf.outputsize()) {
-                        List<HistoricalDataPointDto> sliced = new ArrayList<>(allCandles.subList(allCandles.size() - tf.outputsize(), allCandles.size()));
-                        StockHistoryDto slicedDto = StockHistoryDto.builder()
-                                .symbol(widerCached.history().getSymbol())
-                                .exchange(widerCached.history().getExchange())
-                                .currency(widerCached.history().getCurrency())
-                                .lastRefreshed(sliced.isEmpty() ? null : sliced.get(sliced.size() - 1).getDate())
-                                .timeZone(widerCached.history().getTimeZone())
-                                .candles(sliced)
-                                .build();
-                        historyCache.put(cacheKey, new CachedHistory(slicedDto, System.currentTimeMillis()));
-                        log.info("[MarketData] provider=TWELVE_DATA symbol={} range={} sliced_from={}", clean, cleanRange, widerRange);
-                        return Optional.of(slicedDto);
-                    }
-                }
-            }
-        }
-
-        // 3. Check rate-limit cooldown
+        // 2. Check rate-limit cooldown
         if (System.currentTimeMillis() < rateLimitCooldownUntil.get()) {
             log.info("[MarketData] provider=TWELVE_DATA symbol={} range={} endpoint=time_series status=COOLDOWN_ACTIVE", clean, cleanRange);
             if (cached != null) {
                 return Optional.of(cached.history());
             }
-            for (Map.Entry<String, CachedHistory> entry : historyCache.entrySet()) {
-                if (entry.getKey().startsWith(clean)) {
-                    return Optional.of(entry.getValue().history());
-                }
-            }
-            return Optional.empty();
+            throw new RateLimitExceededException("Twelve Data API rate limit cooldown active. Please wait a few seconds before requesting " + cleanRange + ".");
         }
 
         String apiKey = resolveApiKey();
@@ -651,11 +628,6 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                     log.warn("[MarketData] provider=TWELVE_DATA symbol={} range={} endpoint=time_series status=RATE_LIMIT_429", clean, cleanRange);
                     if (cached != null) {
                         return Optional.of(cached.history());
-                    }
-                    for (Map.Entry<String, CachedHistory> entry : historyCache.entrySet()) {
-                        if (entry.getKey().startsWith(clean)) {
-                            return Optional.of(entry.getValue().history());
-                        }
                     }
                     throw new RateLimitExceededException("Twelve Data rate limit reached: " + message);
                 }
@@ -731,9 +703,9 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                     .candles(candles)
                     .build();
 
+            // Cache strictly by clean + "_" + cleanRange so timeframes NEVER mix
             historyCache.put(cacheKey, new CachedHistory(historyDto, System.currentTimeMillis()));
-            historyCache.put(clean, new CachedHistory(historyDto, System.currentTimeMillis()));
-            log.info("[MarketData] provider=TWELVE_DATA symbol={} range={} endpoint=time_series status=SUCCESS", clean, cleanRange);
+            log.info("[MarketData] provider=TWELVE_DATA symbol={} range={} endpoint=time_series status=SUCCESS candleCount={}", clean, cleanRange, candles.size());
             return Optional.of(historyDto);
 
         } catch (RateLimitExceededException | MarketDataException e) {
@@ -745,11 +717,6 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
                 log.warn("[MarketData] provider=TWELVE_DATA symbol={} range={} endpoint=time_series status=RATE_LIMIT_429", clean, cleanRange);
                 if (cached != null) {
                     return Optional.of(cached.history());
-                }
-                for (Map.Entry<String, CachedHistory> entry : historyCache.entrySet()) {
-                    if (entry.getKey().startsWith(clean)) {
-                        return Optional.of(entry.getValue().history());
-                    }
                 }
                 throw new RateLimitExceededException("Twelve Data rate limit reached: HTTP 429");
             }
@@ -766,11 +733,6 @@ public class TwelveDataMarketDataProvider implements MarketDataProvider {
             log.error("[MarketData] provider=TWELVE_DATA symbol={} range={} endpoint=time_series status=UNEXPECTED_ERROR", clean, cleanRange);
             if (cached != null) {
                 return Optional.of(cached.history());
-            }
-            for (Map.Entry<String, CachedHistory> entry : historyCache.entrySet()) {
-                if (entry.getKey().startsWith(clean)) {
-                    return Optional.of(entry.getValue().history());
-                }
             }
             throw new MarketDataException("Failed to fetch market history: " + e.getMessage(), e);
         }
