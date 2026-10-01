@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import api from '../services/api'
-import type { StockQuote, ApiResponse } from '../types/auth'
+import portfolioService from '../services/portfolioService'
+import watchlistService from '../services/watchlistService'
+import tradeService from '../services/tradeService'
+import type { StockQuote, ApiResponse, Portfolio, WatchlistItem, Order, Transaction } from '../types/auth'
 import Sidebar, { type DashboardTab } from './dashboard/Sidebar'
 import TopBar from './dashboard/TopBar'
 import PortfolioMetrics from './dashboard/PortfolioMetrics'
@@ -16,12 +19,19 @@ import MarketsModule from './markets/MarketsModule'
 import PortfolioSetupModal from './dashboard/PortfolioSetupModal'
 
 export const Dashboard: React.FC = () => {
-  const { wallet } = useAuth()
+  const { wallet, refreshWallet } = useAuth()
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard')
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [stocks, setStocks] = useState<StockQuote[]>([])
   const [selectedStock, setSelectedStock] = useState<StockQuote | null>(null)
   const [isSetupModalOpen, setIsSetupModalOpen] = useState(false)
+
+  // Real user data states
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
+  const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [equityHistory, setEquityHistory] = useState<any[]>([])
 
   // Auto-prompt initial onboarding if wallet is unconfigured and has 0 balance
   useEffect(() => {
@@ -30,20 +40,85 @@ export const Dashboard: React.FC = () => {
     }
   }, [wallet])
 
-  // Fetch stocks from backend market API
+  // Load real authenticated user portfolio, watchlist, orders & transactions
+  const loadUserData = useCallback(async () => {
+    try {
+      const [portData, wlData, ordData, txnData, historyData] = await Promise.allSettled([
+        portfolioService.getPortfolio(),
+        watchlistService.getWatchlist(),
+        tradeService.getOrders(),
+        tradeService.getTransactions(),
+        portfolioService.getPortfolioHistory(),
+      ])
+
+      if (portData.status === 'fulfilled') {
+        setPortfolio(portData.value)
+      }
+      if (wlData.status === 'fulfilled') {
+        setWatchlistItems(wlData.value)
+      }
+      if (ordData.status === 'fulfilled') {
+        setOrders(ordData.value)
+      }
+      if (txnData.status === 'fulfilled') {
+        setTransactions(txnData.value)
+      }
+      if (historyData.status === 'fulfilled') {
+        setEquityHistory(historyData.value || [])
+      }
+    } catch (err) {
+      console.error('Failed to load user dashboard data:', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadUserData()
+  }, [loadUserData])
+
+  // Fetch stocks from backend market API for TopBar search and Markets
   useEffect(() => {
     api
       .get<ApiResponse<StockQuote[]>>('/market/stocks')
       .then((res) => {
         if (res.data?.data) {
           setStocks(res.data.data)
-          if (res.data.data.length > 0) {
+          if (res.data.data.length > 0 && !selectedStock) {
             setSelectedStock(res.data.data[0])
           }
         }
       })
       .catch((err) => console.error('Failed to load market stocks in dashboard:', err))
   }, [])
+
+  const handleSelectSymbol = (symbol: string) => {
+    const matched = stocks.find((s) => s.symbol.toUpperCase() === symbol.toUpperCase())
+    if (matched) {
+      setSelectedStock(matched)
+    } else {
+      setSelectedStock({
+        symbol,
+        name: symbol,
+        exchange: 'NASDAQ',
+        sector: 'Equities',
+        currentPrice: 0,
+        previousClose: 0,
+        changeAmount: 0,
+        changePercent: 0,
+        volume: 0,
+      })
+    }
+    setActiveTab('markets')
+  }
+
+  // Calculated values backed strictly by authenticated user's database records
+  const cashBalance = wallet ? Number(wallet.balance || 0) : Number(portfolio?.cashBalance || 0)
+  const holdings = portfolio?.holdings || []
+  const investedValue = Number(portfolio?.investedValue || 0)
+  const totalNetWorth = cashBalance + investedValue
+  const unrealizedPnL = Number(portfolio?.unrealizedPnL || 0)
+  const unrealizedPnLPercent = Number(portfolio?.unrealizedPnLPercent || 0)
+  const activePositions = portfolio?.activePositions ?? holdings.length
+  const userCurrency = portfolio?.currency || wallet?.currency || 'INR'
 
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-[#080c14] text-slate-900 dark:text-slate-100 font-sans antialiased overflow-x-hidden transition-colors">
@@ -63,7 +138,7 @@ export const Dashboard: React.FC = () => {
           onSelectStock={(stock) => {
             setSelectedStock(stock)
             if (activeTab !== 'dashboard' && activeTab !== 'watchlist' && activeTab !== 'markets') {
-              setActiveTab('watchlist')
+              setActiveTab('markets')
             }
           }}
           onOpenSetupCapital={() => setIsSetupModalOpen(true)}
@@ -74,38 +149,55 @@ export const Dashboard: React.FC = () => {
           {/* TAB: DASHBOARD (Default high-density overview) */}
           {activeTab === 'dashboard' && (
             <div className="space-y-4 animate-fade-in">
-              {/* Main Area: Portfolio Value, Available Cash, Today's P&L */}
+              {/* Main Area: Real Portfolio Value, Available Cash, P&L */}
               <PortfolioMetrics
                 wallet={wallet}
-                investedAmount={22850.0}
-                holdingsValue={24325.0}
-                todayChangeAmount={1475.0}
-                todayChangePercent={1.21}
+                portfolio={portfolio}
+                holdingsValue={investedValue}
+                activePositions={activePositions}
+                unrealizedPnL={unrealizedPnL}
+                unrealizedPnLPercent={unrealizedPnLPercent}
+                currency={userCurrency}
                 onOpenSetupCapital={() => setIsSetupModalOpen(true)}
               />
 
-              {/* Grid: Performance Chart (8 cols) + Market Overview (4 cols) */}
+              {/* Grid: Real Performance Chart (8 cols) + Data-Driven Holdings & Watchlist Widgets (4 cols) */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
                 <div className="lg:col-span-8">
-                  <PerformanceChart />
+                  <PerformanceChart
+                    history={equityHistory}
+                    netWorth={totalNetWorth}
+                    unrealizedPnL={unrealizedPnL}
+                    unrealizedPnLPercent={unrealizedPnLPercent}
+                    currency={userCurrency}
+                  />
                 </div>
                 <div className="lg:col-span-4 space-y-2.5">
                   <MarketOverview
-                    stocks={stocks}
-                    onSelectStock={(stock) => setSelectedStock(stock)}
+                    holdings={holdings}
+                    watchlistItems={watchlistItems}
+                    currency={userCurrency}
+                    onSelectSymbol={handleSelectSymbol}
+                    onNavigateToMarkets={() => setActiveTab('markets')}
                   />
                 </div>
               </div>
 
-              {/* Watchlist Section */}
+              {/* Market Watchlist Section */}
               <WatchlistSection
-                stocks={stocks}
+                watchlistItems={watchlistItems}
                 selectedStock={selectedStock}
-                onSelectStock={(stock) => setSelectedStock(stock)}
+                onSelectSymbol={handleSelectSymbol}
+                onRefreshWatchlist={loadUserData}
+                currency={userCurrency}
               />
 
               {/* Recent Transactions Section */}
-              <RecentTransactions />
+              <RecentTransactions
+                orders={orders}
+                transactions={transactions}
+                currency={userCurrency}
+              />
             </div>
           )}
 
@@ -123,9 +215,11 @@ export const Dashboard: React.FC = () => {
           {activeTab === 'watchlist' && (
             <div className="space-y-4 animate-fade-in">
               <WatchlistSection
-                stocks={stocks}
+                watchlistItems={watchlistItems}
                 selectedStock={selectedStock}
-                onSelectStock={(stock) => setSelectedStock(stock)}
+                onSelectSymbol={handleSelectSymbol}
+                onRefreshWatchlist={loadUserData}
+                currency={userCurrency}
               />
             </div>
           )}
@@ -135,28 +229,36 @@ export const Dashboard: React.FC = () => {
             <div className="space-y-4 animate-fade-in">
               <PortfolioMetrics
                 wallet={wallet}
-                investedAmount={22850.0}
-                holdingsValue={24325.0}
-                todayChangeAmount={1475.0}
-                todayChangePercent={1.21}
+                portfolio={portfolio}
+                holdingsValue={investedValue}
+                activePositions={activePositions}
+                unrealizedPnL={unrealizedPnL}
+                unrealizedPnLPercent={unrealizedPnLPercent}
+                currency={userCurrency}
                 onOpenSetupCapital={() => setIsSetupModalOpen(true)}
               />
-              <PortfolioHoldingsView />
+              <PortfolioHoldingsView holdings={holdings} currency={userCurrency} />
             </div>
           )}
 
           {/* TAB: ORDERS */}
           {activeTab === 'orders' && (
             <div className="space-y-4 animate-fade-in">
-              <OrdersView />
+              <OrdersView orders={orders} transactions={transactions} currency={userCurrency} />
             </div>
           )}
 
           {/* TAB: ANALYSIS */}
           {activeTab === 'analysis' && (
             <div className="space-y-4 animate-fade-in">
-              <PerformanceChart />
-              <AnalysisView />
+              <PerformanceChart
+                history={equityHistory}
+                netWorth={totalNetWorth}
+                unrealizedPnL={unrealizedPnL}
+                unrealizedPnLPercent={unrealizedPnLPercent}
+                currency={userCurrency}
+              />
+              <AnalysisView holdings={holdings} orders={orders} currency={userCurrency} />
             </div>
           )}
         </main>
@@ -165,7 +267,11 @@ export const Dashboard: React.FC = () => {
       {/* Portfolio Setup & Capital Adjustment Modal */}
       <PortfolioSetupModal
         isOpen={isSetupModalOpen}
-        onClose={() => setIsSetupModalOpen(false)}
+        onClose={() => {
+          setIsSetupModalOpen(false)
+          refreshWallet()
+          loadUserData()
+        }}
         isInitialOnboarding={wallet?.isConfigured === false && Number(wallet?.balance) === 0}
       />
     </div>

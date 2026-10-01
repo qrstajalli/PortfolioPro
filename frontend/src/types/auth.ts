@@ -77,3 +77,82 @@ export interface StockHistory {
   timeZone?: string
   candles: HistoricalCandle[]
 }
+
+export interface Holding {
+  id: number
+  symbol: string
+  name: string
+  exchange: string
+  quantity: number
+  averageBuyPrice: number
+  totalInvested: number
+  currentPrice: number
+  currentValue: number
+  pnl: number
+  pnlPercent: number
+  allocation: number
+  currency: string
+}
+
+export interface Portfolio {
+  id: number
+  userId: number
+  cashBalance: number
+  investedValue: number
+  totalCostBasis?: number
+  totalNetWorth: number
+  unrealizedPnL: number
+  unrealizedPnLPercent: number
+  activePositions: number
+  currency: string
+  holdings: Holding[]
+}
+
+export interface WatchlistItem {
+  id: number
+  symbol: string
+  name: string
+  exchange: string
+  sector?: string
+  currentPrice?: number
+  changeAmount?: number
+  changePercent?: number
+  dayLow?: number
+  dayHigh?: number
+  volume?: number
+  peRatio?: number
+  currency?: string
+  addedAt?: string
+}
+
+export interface Order {
+  id: number
+  orderNumber: string
+  symbol: string
+  name: string
+  exchange: string
+  side: 'BUY' | 'SELL'
+  orderType: string
+  orderStatus: string
+  quantity: number
+  executionPrice: number
+  totalAmount: number
+  notes?: string
+  createdAt: string
+  executedAt?: string
+}
+
+export interface Transaction {
+  id: number
+  transactionReference: string
+  symbol: string
+  name: string
+  exchange: string
+  type: string
+  quantity?: number
+  price?: number
+  amount: number
+  balanceAfter?: number
+  description?: string
+  transactionTime: string
+}
