@@ -34,9 +34,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems: { id: DashboardTab; label: string; icon: React.ReactNode; badge?: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4 shrink-0" /> },
     { id: 'markets', label: 'Markets', icon: <TrendingUp className="h-4 w-4 shrink-0" />, badge: 'LIVE' },
-    { id: 'watchlist', label: 'Watchlist', icon: <Bookmark className="h-4 w-4 shrink-0" />, badge: '8' },
-    { id: 'portfolio', label: 'Portfolio', icon: <Briefcase className="h-4 w-4 shrink-0" />, badge: '3 Pos' },
-    { id: 'orders', label: 'Orders', icon: <FileText className="h-4 w-4 shrink-0" />, badge: '5' },
+    { id: 'watchlist', label: 'Watchlist', icon: <Bookmark className="h-4 w-4 shrink-0" /> },
+    { id: 'portfolio', label: 'Portfolio', icon: <Briefcase className="h-4 w-4 shrink-0" /> },
+    { id: 'orders', label: 'Orders', icon: <FileText className="h-4 w-4 shrink-0" /> },
     { id: 'analysis', label: 'Analysis', icon: <BarChart3 className="h-4 w-4 shrink-0" /> },
   ]
 
